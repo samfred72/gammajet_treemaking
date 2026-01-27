@@ -1,0 +1,14 @@
+Executable         = script.sh
+Universe           = vanilla
+notification       = Never
+Input              = /dev/null
+Arguments          = $(filename) $(process)
+Initialdir         = /sphenix/user/samfred/projects/gammajet/treemaking/macros
+Output             = $(Initialdir)/log/$(process).out
+Error              = $(Initialdir)/log/$(process).err
+Log                = /tmp/samfred/$(process).log
+PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1)
+job_lease_duration = 3600
+request_memory     = 4096MB
+
+Queue filename from queue.list

@@ -1,0 +1,14 @@
+Executable  = MCscript.sh
+Universe    = vanilla
+notification= Never
+Input       = /dev/null
+Arguments       = $(trigger) $(segment) $(issmear)
+Initialdir    = /sphenix/user/samfred/projects/gammajet/histmaking
+Output    = $(Initialdir)/log/$(process).out
+Error     = $(Initialdir)/log/$(process).err
+Log       = tmp/$(process).log
+PeriodicHold  = (NumJobStarts>=1 && JobStatus == 1)
+job_lease_duration = 3600
+
+Queue trigger, segment , issmear from MCrunlist.list
+
