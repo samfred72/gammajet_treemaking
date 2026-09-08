@@ -11,11 +11,12 @@ this_script=`readlink -f $this_script`
 this_dir=`dirname $this_script`
 echo running: $this_script $*
 
-LIST=$1
-TRIGGER=$2
-PROCESS=$3
+SIM=$1
+LIST=$2
+TRIGGER=$3
+PROCESS=$4
 TEST=0
-[ -n "$4" ] && TEST=$4
+[ -n "$5" ] && TEST=$5
 
 # go to condor scratch directory
 if [[ $TEST == 0 ]]; then
@@ -27,7 +28,7 @@ if [[ $TEST == 0 ]]; then
     exit -1
   fi
   
-  files=`cat /sphenix/user/samfred/projects/filelists/pythia28/pythia_${TRIGGER}/${LIST}`
+  files=`cat /sphenix/user/samfred/projects/filelists/${SIM}28/${SIM}_${TRIGGER}/${LIST}`
   echo $files
   for file in $files; do
     echo "Copying $file"
@@ -35,17 +36,18 @@ if [[ $TEST == 0 ]]; then
   done
   
   cp /sphenix/user/samfred/projects/gammajet/treemaking/macros/MCFun4All_macro.C .
+  cp /sphenix/user/samfred/projects/gammajet/treemaking/macros/G4_CEmc_Spacal_local.C .
 fi
 
 echo "input files..."
-cat /sphenix/user/samfred/projects/filelists/pythia28/pythia_${TRIGGER}/${LIST}
+cat /sphenix/user/samfred/projects/filelists/${SIM}28/${SIM}_${TRIGGER}/${LIST}
 
-root -l -q -b "MCFun4All_macro.C(\"/sphenix/user/samfred/projects/filelists/pythia28/pythia_${TRIGGER}/${LIST}\",${TEST},\"${TRIGGER}\")"
+root -l -q -b "MCFun4All_macro.C(\"/sphenix/user/samfred/projects/filelists/${SIM}28/${SIM}_${TRIGGER}/${LIST}\",${TEST},\"${TRIGGER}\",\"${SIM}\")"
 
 if [[ $TEST == 0 ]]; then
   cp outtree_$LIST /sphenix/tg/tg01/jets/samfred/gammajet
-  #rm /sphenix/user/samfred/projects/gammajet/treemaking/macros/log/${PROCESS}.out
-  #rm /sphenix/user/samfred/projects/gammajet/treemaking/macros/log/${PROCESS}.err
+  rm /sphenix/user/samfred/projects/gammajet/treemaking/macros/MClog/${PROCESS}.out
+  rm /sphenix/user/samfred/projects/gammajet/treemaking/macros/MClog/${PROCESS}.err
 fi
 
 echo all done

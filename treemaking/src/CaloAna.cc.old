@@ -1,0 +1,636 @@
+#include <iostream>
+#include "CaloAna.h"
+using namespace std;
+
+CaloAna::CaloAna(const std::string& name, const char* outname)
+  : SubsysReco(name)
+    , detector("HCALIN")
+{
+  outfilename = Form("%s",outname);
+}
+
+CaloAna::~CaloAna()
+{
+  //delete hm;
+  delete towerntuple;
+}
+
+int CaloAna::Init(PHCompositeNode*)
+{ 
+  //triggeranalyzer = new TriggerAnalyzer();
+  //triggeranalyzer->UseEmulator(useEmulator);
+  try {
+    InitOutputFile();
+    InitTree();
+  }  
+  catch (const std::exception& e){
+    std::cerr << "CaloAna::Init - Exception during init! For " << e.what() << " return -1" << std::endl;
+    return -1;
+  }
+
+  return 0;
+}
+
+void CaloAna::InitOutputFile(){
+  std::cout << "output filename : " << outfilename.c_str() << std::endl;
+  outfile = new TFile(outfilename.c_str(), "RECREATE");
+  if(!outfile || outfile->IsZombie()){
+    throw std::runtime_error("Failed open file");
+  }
+}
+
+void CaloAna::InitTree(){
+  towerntuple = new TTree("towerntup", "Ntuple");
+  // Global
+  towerntuple->Branch("RunNumber",&m_run_number);
+  towerntuple->Branch("vz",&vz);
+  if (isMC) towerntuple->Branch("truth_vz",&truth_vz);
+  towerntuple->Branch("ScaledTriggerBit",ScaledTriggerBit,"ScaledTriggerBit[64]/O");
+  towerntuple->Branch("LiveTriggerBit",LiveTriggerBit,"LiveTriggerBit[64]/O");
+  towerntuple->Branch("Scaledowns",m_scaledowns,"Scaledowns[64]/I");
+  // MBD
+  towerntuple->Branch("mbd_nhits_south",&m_mbd_nhits_south);
+  towerntuple->Branch("mbd_nhits_north",&m_mbd_nhits_north);
+  towerntuple->Branch("mbd_time_south",&m_mbd_time_south);
+  towerntuple->Branch("mbd_time_north",&m_mbd_time_north);
+  // Clusters
+  towerntuple->Branch("nClusters", &nClusters);
+  towerntuple->Branch("cluster_pt" ,&m_cluster_pt                 );
+  towerntuple->Branch("cluster_e"  ,&m_cluster_e                  );
+  towerntuple->Branch("cluster_eta",&m_cluster_eta                );
+  towerntuple->Branch("cluster_phi",&m_cluster_phi                );
+  towerntuple->Branch("cluster_showershape",&m_cluster_showershape);
+  towerntuple->Branch("cluster_bdt_scores",&m_cluster_bdt_scores  );
+  towerntuple->Branch("cluster_time",&m_cluster_time              );
+  if (isMC) { 
+    towerntuple->Branch("nTruthClusters",&nTruthClusters);
+    towerntuple->Branch("truth_cluster_pt" ,&m_truth_cluster_pt );
+    towerntuple->Branch("truth_cluster_e"  ,&m_truth_cluster_e  );
+    towerntuple->Branch("truth_cluster_eta",&m_truth_cluster_eta);
+    towerntuple->Branch("truth_cluster_phi",&m_truth_cluster_phi);
+    towerntuple->Branch("truth_cluster_iso3",&m_truth_cluster_iso3);
+    towerntuple->Branch("truth_cluster_iso4",&m_truth_cluster_iso4);
+  }
+  // jets
+  towerntuple->Branch("nJets",nJets, "nJets[4]/S");
+  towerntuple->Branch("jet_pt",      &m_jet_pt      );
+  towerntuple->Branch("jet_pt_calib",&m_jet_pt_calib);
+  towerntuple->Branch("jet_e",       &m_jet_e       );
+  towerntuple->Branch("jet_eta",     &m_jet_eta     );
+  towerntuple->Branch("jet_phi",     &m_jet_phi     );
+  towerntuple->Branch("jet_emfrac",  &m_jet_emfrac  );
+  towerntuple->Branch("jet_ihfrac",  &m_jet_ihfrac  );
+  towerntuple->Branch("jet_ohfrac",  &m_jet_ohfrac  );
+  towerntuple->Branch("jet_time",    &m_jet_time    );
+  if (isMC) {
+    towerntuple->Branch("jet_pt_smear",&m_jet_pt_smear);
+    
+    towerntuple->Branch("nTruthJets",nTruthJets, "nTruthJets[4]/S");
+    towerntuple->Branch("truth_jet_pt" ,&m_truth_jet_pt );
+    towerntuple->Branch("truth_jet_e"  ,&m_truth_jet_e  );
+    towerntuple->Branch("truth_jet_eta",&m_truth_jet_eta);
+    towerntuple->Branch("truth_jet_phi",&m_truth_jet_phi);
+  }
+}
+
+int CaloAna::process_event(PHCompositeNode* topNode)
+{
+  if(!topNode){
+    std::cerr << "CaloAna::Init - topnode PHCompositeNode not valid! return -1" << std::endl;
+    return -1;
+  }
+  if(count % 1000 == 0) std::cout << "event : " << count  << std::endl;
+  if(isMC && count % 1000 != 0 && count % 10 == 0) std::cout << "event : " << count  << std::endl;
+  count++;
+  if (process_towers(topNode)) {
+    Clear();
+    return Fun4AllReturnCodes::ABORTEVENT;
+  }
+  return Fun4AllReturnCodes::EVENT_OK;
+}
+
+int CaloAna::process_towers(PHCompositeNode* topNode)
+{
+  if (isMC && ProcessTruth(topNode)) {
+    Clear();
+    return 1;
+  }
+  if (ProcessGlobalEventInfo(topNode)) {
+    Clear();
+    return 1;
+  }
+
+  // MBD energy and hits
+  MbdOut * mbdout = (findNode::getClass<MbdOut>(topNode, "MbdOut"));
+  if (mbdout) {
+    m_mbd_nhits_south = mbdout->get_npmt(0);
+    m_mbd_nhits_north = mbdout->get_npmt(1);
+    m_mbd_time_south = mbdout->get_time(0);
+    m_mbd_time_north = mbdout->get_time(1);
+  }
+
+
+  // split cluster loop
+  RawClusterContainer * photons0 = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC0");
+  
+  nClusters = 0;
+  for (const auto& pair : photons0->getClustersMap()) 
+  {
+    PhotonClusterv1 * photon = dynamic_cast<PhotonClusterv1*>(pair.second);
+    CLHEP::Hep3Vector vertex;
+    vertex.set(vx,vy,vz);
+    CLHEP::Hep3Vector E_vec_cluster = RawClusterUtility::GetEVec(*photon, vertex);
+    
+    float clPt = E_vec_cluster.perp();
+    float clEta = E_vec_cluster.pseudoRapidity();
+    float clPhi = E_vec_cluster.phi();
+    float clE = E_vec_cluster.mag();
+    if (clPt < cluster_pt_cut) { continue; }
+    
+    m_cluster_pt->push_back(clPt);
+    m_cluster_e->push_back(clE);
+    m_cluster_phi->push_back(clPhi);
+    m_cluster_eta->push_back(clEta);
+   
+    m_cluster_showershape->at( 0).push_back(photon->get_shower_shape_parameter("et1"));
+    m_cluster_showershape->at( 1).push_back(photon->get_shower_shape_parameter("cluster_eta"));
+    m_cluster_showershape->at( 2).push_back(photon->get_shower_shape_parameter("cluster_phi"));
+    m_cluster_showershape->at( 3).push_back(photon->get_shower_shape_parameter("weta_cogx"));
+    m_cluster_showershape->at( 4).push_back(photon->get_shower_shape_parameter("wphi_cogx"));
+    m_cluster_showershape->at( 5).push_back(photon->get_shower_shape_parameter("e11")/photon->get_shower_shape_parameter("e33"));
+    m_cluster_showershape->at( 6).push_back(photon->get_shower_shape_parameter("e32")/photon->get_shower_shape_parameter("e35"));
+    m_cluster_showershape->at( 7).push_back(photon->get_shower_shape_parameter("drad"));
+    m_cluster_showershape->at( 8).push_back(photon->get_shower_shape_parameter("iso_03_emcal"));
+    m_cluster_showershape->at( 9).push_back(photon->get_shower_shape_parameter("iso_03_hcalin"));
+    m_cluster_showershape->at(10).push_back(photon->get_shower_shape_parameter("iso_03_hcalout"));
+    m_cluster_showershape->at(11).push_back(photon->get_shower_shape_parameter("iso_04_emcal"));
+    m_cluster_showershape->at(12).push_back(photon->get_shower_shape_parameter("iso_04_hcalin"));
+    m_cluster_showershape->at(13).push_back(photon->get_shower_shape_parameter("iso_04_hcalout"));
+    m_cluster_time->push_back(photon->get_shower_shape_parameter("mean_time"));
+     
+    nClusters++;
+  }
+    
+  RawClusterContainer * photons1  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC1");
+  RawClusterContainer * photons2  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC2");
+  RawClusterContainer * photons3  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC3");
+  RawClusterContainer * photons4  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC4");
+  RawClusterContainer * photons5  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC5");
+  RawClusterContainer * photons6  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC6");
+  RawClusterContainer * photons7  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC7");
+  RawClusterContainer * photons8  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC8");
+  RawClusterContainer * photons9  = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC9");
+  RawClusterContainer * photons10 = findNode::getClass<RawClusterContainer>(topNode, "PHOTONCLUSTER_CEMC10");
+ 
+  RawClusterContainer * photons[11] = {photons0,photons1,photons2,photons3,photons4,photons5,photons6,photons7,photons8,photons9,photons10};
+  for (int i = 0; i < 11; i++) {  
+    for (const auto& pair : photons[i]->getClustersMap()) 
+    { 
+      PhotonClusterv1 * photon = dynamic_cast<PhotonClusterv1*>(pair.second);
+      m_cluster_bdt_scores->at(i).push_back(photon->get_shower_shape_parameter("bdt_score"));
+    }
+  }
+
+  if (!isMC && nClusters == 0) {
+    Clear();
+    return 1;
+  }
+  
+  // Jets
+  // Get the towerinfo containers
+  TowerInfoContainer *_emcal_towers = nullptr;
+  TowerInfoContainer *_ihcal_towers = nullptr;
+  TowerInfoContainer *_ohcal_towers = nullptr;
+  _emcal_towers = findNode::getClass<TowerInfoContainer>(topNode, "TOWERINFO_CALIB_CEMC_RETOWER");
+  _ihcal_towers = findNode::getClass<TowerInfoContainer>(topNode, "TOWERINFO_CALIB_HCALIN");
+  _ohcal_towers = findNode::getClass<TowerInfoContainer>(topNode, "TOWERINFO_CALIB_HCALOUT");
+  if (!_emcal_towers || !_ihcal_towers || !_ohcal_towers) {
+    std::cout << "TowerInfoContainer is missing" << std::endl;
+    Clear();
+    return 1;
+  }
+ 
+  for (int ir = 0; ir < m_nRadii; ir++) {
+    JetContainer * _jets = findNode::getClass<JetContainer>(topNode, m_jet_nodenames[ir]);
+    JetContainer * _jets_calib = findNode::getClass<JetContainer>(topNode, m_jet_calib_nodenames[ir]);
+    if (!_jets) {
+      std::cout << "JetContainer is missing" << std::endl;
+      Clear();
+      return 1;
+    }
+    // Fill the jet information.
+    nJets[ir] = 0;
+    std::vector<std::vector<Jet*>> _both_jets;
+    std::transform(_jets->begin(), _jets->end(), _jets_calib->begin(),
+                   std::back_inserter(_both_jets),
+                   [](Jet * j, Jet * jc) {
+                      std::vector<Jet*> v = {j,jc}; 
+                      return v;
+                   });
+
+    for (unsigned ij = 0; ij < _both_jets.size(); ij++) {
+      Jet * _jet = _both_jets.at(ij).at(0);
+      Jet * _jet_calib = _both_jets.at(ij).at(1);
+      float e = _jet->get_e();
+      float pt = _jet->get_pt();
+      float pt_calib = _jet_calib->get_pt();
+      float pt_smear = rand.Gaus(pt_calib,pt_calib*smear);
+      if (pt < jet_pt_cut && pt_calib < jet_calib_pt_cut && (!isMC || (isMC && pt_smear < jet_calib_pt_cut))) continue;
+
+      float emcal_calo_e = 0;
+      float ihcal_calo_e = 0;
+      float ohcal_calo_e = 0;
+      float jet_time = 0;
+      float jet_time_count = 0;
+      for (auto comp: _jet->get_comp_vec()) {
+        unsigned int channel = comp.second;
+        // emcal bits
+        if (comp.first == 14 || comp.first == 29 || comp.first == 25 || comp.first == 28) {
+          TowerInfo *_tower = _emcal_towers->get_tower_at_channel(channel);
+          float jet_tower_e = _tower->get_energy();
+          float jet_tower_time = _tower->get_time();
+          emcal_calo_e += jet_tower_e;
+          if (jet_tower_e > 0.1) {
+            jet_time += jet_tower_time * jet_tower_e;
+            jet_time_count += jet_tower_e;
+          }
+        } 
+        // ihcal  bits
+        else if (comp.first == 15 ||  comp.first == 30 || comp.first == 26) {
+          TowerInfo *_tower = _ihcal_towers->get_tower_at_channel(channel);
+          float jet_tower_e = _tower->get_energy();
+          float jet_tower_time = _tower->get_time();
+          ihcal_calo_e += jet_tower_e;
+          if (jet_tower_e > 0.1) {
+            jet_time += jet_tower_time * jet_tower_e;
+            jet_time_count += jet_tower_e;
+          }
+        } 
+        // ohcal bits
+        else if (comp.first == 16 || comp.first == 31 || comp.first == 27) {
+          TowerInfo *_tower = _ohcal_towers->get_tower_at_channel(channel);
+          float jet_tower_e = _tower->get_energy();
+          float jet_tower_time = _tower->get_time();
+          ohcal_calo_e += jet_tower_e;
+          if (jet_tower_e > 0.1) {
+            jet_time += jet_tower_time * jet_tower_e;
+            jet_time_count += jet_tower_e;
+          }
+        }
+      }
+      if (jet_time_count > 0) jet_time = jet_time / jet_time_count;
+      else jet_time = -999;
+
+      m_jet_pt_calib->at(ir).push_back(pt_calib);
+      m_jet_pt_smear->at(ir).push_back(pt_smear);
+      m_jet_pt->at(ir).push_back(pt);
+      m_jet_e->at(ir).push_back(e);
+      m_jet_eta->at(ir).push_back(_jet->get_eta());
+      m_jet_phi->at(ir).push_back(_jet->get_phi());
+      m_jet_emfrac->at(ir).push_back(emcal_calo_e/(emcal_calo_e + ihcal_calo_e + ohcal_calo_e));
+      m_jet_ihfrac->at(ir).push_back(ihcal_calo_e/(emcal_calo_e + ihcal_calo_e + ohcal_calo_e));
+      m_jet_ohfrac->at(ir).push_back(ohcal_calo_e/(emcal_calo_e + ihcal_calo_e + ohcal_calo_e));
+      m_jet_time->at(ir).push_back(jet_time);
+      nJets[ir]++;
+    }
+  }
+  
+  maxN = max({nJets[0],nJets[1],nJets[2],nJets[3]});
+  
+  
+  if (!isMC && (nClusters == 0 || maxN == 0)) { Clear(); return 1; }
+  if (isMC && nTruthClusters == 0) { Clear(); return 1; }
+  //if (isMC && (nTruthClusters == 0 || maxTruthN == 0)) { Clear(); return 1;}
+  
+  towerntuple->Fill();
+  Clear();
+
+  return 0;
+
+} 
+
+
+void CaloAna::Clear() {
+  m_mbd_nhits_south = 0;
+  m_mbd_nhits_north = 0;
+  m_mbd_time_south = 0;
+  m_mbd_time_north = 0;
+ 
+  m_cluster_pt->clear();
+  m_cluster_e->clear();
+  m_cluster_eta->clear();
+  m_cluster_phi->clear();
+  m_cluster_time->clear();
+  nClusters = 0;
+  for (int i = 0; i < 11; i++) {
+    m_cluster_bdt_scores->at(i).clear();
+  }
+  for (int i = 0; i < 14; i++) {
+    m_cluster_showershape->at(i).clear();
+  }
+  for (int ir = 0; ir < m_nRadii; ir++) {
+    m_jet_pt->at(ir).clear();
+    m_jet_pt_calib->at(ir).clear();
+    m_jet_pt_smear->at(ir).clear();
+    m_jet_e->at(ir).clear();
+    m_jet_eta->at(ir).clear();
+    m_jet_phi->at(ir).clear();
+    m_jet_emfrac->at(ir).clear();
+    m_jet_ihfrac->at(ir).clear();
+    m_jet_ohfrac->at(ir).clear();
+    m_jet_time->at(ir).clear();
+    nJets[ir] = 0;
+  }
+  if (isMC) {
+
+    m_truth_cluster_pt->clear();
+    m_truth_cluster_e->clear();
+    m_truth_cluster_eta->clear();
+    m_truth_cluster_phi->clear();
+    nTruthClusters = 0;
+    for (int ir = 0; ir < m_nRadii; ir++) {
+      m_truth_jet_pt->at(ir).clear();
+      m_truth_jet_e->at(ir).clear();
+      m_truth_jet_eta->at(ir).clear();
+      m_truth_jet_phi->at(ir).clear();
+      nTruthJets[ir] = 0;
+    }
+  }
+}
+
+int CaloAna::ProcessGlobalEventInfo(PHCompositeNode* topNode){
+
+  vz=-999;
+  vx=-999;
+  vy=-999;
+  if (isMC) {
+    MbdVertexMap *mbdvtxmap = findNode::getClass<MbdVertexMap>(topNode,"MbdVertexMap");
+    bool isglbvtx=true;
+    if(!mbdvtxmap || mbdvtxmap->empty()) { 
+      isglbvtx = false;
+    }
+    if (isglbvtx) {
+      MbdVertex *bvertex = nullptr;
+      for (MbdVertexMap::ConstIter mbditer= mbdvtxmap->begin(); mbditer != mbdvtxmap->end(); ++mbditer)
+      {
+        bvertex = mbditer->second;
+      }
+      if(!bvertex) { std::cout << "could not find globalvtxmap iter :: set vtx to (-999,-999,-999)" << std::endl;}
+      else if (bvertex) {
+        vz = bvertex->get_z();
+        vy = bvertex->get_y();
+        vx = bvertex->get_x();
+        count_mbdvtx++;
+      }
+    }
+  }
+  else {
+    GlobalVertexMap *globalvtxmap = findNode::getClass<GlobalVertexMap>(topNode,"GlobalVertexMap");
+    if(!globalvtxmap) return Fun4AllReturnCodes::ABORTEVENT;
+    if(globalvtxmap->empty()){ 
+      return Fun4AllReturnCodes::ABORTEVENT;
+    }
+    GlobalVertex *bvertex= nullptr;
+    for (GlobalVertexMap::ConstIter globaliter= globalvtxmap->begin(); globaliter != globalvtxmap->end(); ++globaliter)
+    {
+      bvertex = globaliter->second;
+    }
+    if(!bvertex) {
+      std::cout << "could not find globalvtxmap iter :: set vtx to (-999,-999,-999)" << std::endl;
+    }
+    else {
+      vz = bvertex->get_z();
+      vy = bvertex->get_y();
+      vx = bvertex->get_x();
+      count_mbdvtx++;
+    }
+  }
+  Gl1Packet *gl1_packet = findNode::getClass<Gl1Packet>(topNode, "14001");
+  if (gl1_packet) {
+    uint64_t gl1_scaledtriggervector = gl1_packet->lValue(0, "ScaledVector");
+    uint64_t gl1_livetriggervector = gl1_packet->lValue(0, "TriggerVector");
+    for (int i = 0; i < 64; i++)
+    {
+      ScaledTriggerBit[i] = ((gl1_scaledtriggervector >> i) & 0x1U);
+      LiveTriggerBit[i] = ((gl1_livetriggervector >> i) & 0x1U);
+    }
+  }
+
+  return 0;
+}
+
+int CaloAna::ProcessTruth(PHCompositeNode* topNode) {
+  m_truthinfo = findNode::getClass<PHG4TruthInfoContainer>(topNode, "G4TruthInfo");
+  m_genevtmap = findNode::getClass<PHHepMCGenEventMap>(topNode,"PHHepMCGenEventMap");
+  if(!m_truthinfo) {std::cout << "no truth info node... just skip the whole part.." << std::endl; return 1;}
+  if (m_truthinfo)
+  {
+    PHG4VtxPoint *gvertex = m_truthinfo->GetPrimaryVtx(m_truthinfo->GetPrimaryVertexIndex());
+    truth_vz = gvertex->get_z();
+    truth_vx = gvertex->get_x();
+    truth_vy = gvertex->get_y();
+  }
+
+
+  ProcessFillTruthPhotonParticle(truth_vz);
+
+  for (int ir = 0; ir < m_nRadii; ir++) {
+    JetContainer * truthjets = findNode::getClass<JetContainer>(topNode, m_truth_jet_nodenames[ir]);
+    nTruthJets[ir] = 0;
+    if(truthjets)
+    {
+      for(unsigned i = 0; i < truthjets->size(); ++i)
+      {
+        Jet* jet = truthjets->get_jet(i);
+        if (jet->get_pt() < jet_pt_cut) continue; 
+        float pt = jet->get_pt();
+        float e = jet->get_e();
+        float eta = jet->get_eta();
+        float phi = jet->get_phi();
+        m_truth_jet_pt->at(ir).push_back(pt);
+        m_truth_jet_e->at(ir).push_back(e);
+        m_truth_jet_eta->at(ir).push_back(eta);
+        m_truth_jet_phi->at(ir).push_back(phi);
+        nTruthJets[ir]++;
+      }
+    }
+  }
+  maxTruthN = max({nTruthJets[0],nTruthJets[1],nTruthJets[2],nTruthJets[3]});
+  return 0;
+}
+
+
+void CaloAna::ProcessFillTruthPhotonParticle(float truthvz){
+
+  m_hepmc_by_barcode.clear();
+  m_g4_by_id.clear();
+  m_g4_by_barcode.clear();
+  m_seen_barcodes.clear();
+
+  float etamin = -10;//= GetShiftedEta(truthvz,-2);
+  float etamax = 10;//= GetShiftedEta(truthvz,2);
+  for(auto &ev : *m_genevtmap){
+    PHHepMCGenEvent* evt = ev.second;
+    if(!evt || !evt->getEvent()) continue;
+
+    HepMC::GenEvent* h = evt->getEvent();
+    for(auto it=h->particles_begin(); it!=h->particles_end(); ++it){
+      HepMC::GenParticle* p = *it;
+      m_hepmc_by_barcode[p->barcode()] = p;
+    }
+  }
+
+  PHG4TruthInfoContainer::ConstRange range = m_truthinfo->GetParticleRange();
+  for(auto it=range.first; it!=range.second; ++it){
+    PHG4Particle* p = it->second;
+    m_g4_by_id[p->get_track_id()] = p;
+    m_g4_by_barcode[p->get_barcode()] = p;
+  }
+
+  for(auto it=range.first; it!=range.second; ++it){
+    PHG4Particle* g4p = it->second;
+    if(!g4p) continue;
+    if(g4p->get_pid() != 22) continue;
+
+    int bc = g4p->get_barcode();
+    if(m_seen_barcodes.count(bc)) continue;
+    m_seen_barcodes.insert(bc);
+
+    PHG4Particle* top_g4 = g4_to_top(g4p);
+    if(!top_g4) continue; 
+
+    int hepmc_bc = top_g4->get_barcode();
+    HepMC::GenParticle* hep = get_hepmc_particle(hepmc_bc);
+
+    if(!hep) continue;
+
+    int root_pdg = find_hepmc_pdg(hep);
+    if(is_hadron(root_pdg)) continue;
+
+    float px = g4p->get_px();
+    float py = g4p->get_py();
+    float pz = g4p->get_pz();
+    float e = g4p->get_e();
+
+    float phi = std::atan2(py,px);
+    float p = std::sqrt(px*px+py*py+pz*pz);
+    float pt = std::sqrt(px*px+py*py);
+    float eta = calc_eta(p, pz);
+    if(eta > etamax || eta < etamin) continue;
+    if (pt < 7) continue;
+    // get isolation
+    float iso3 = 0;
+    float iso4 = 0;
+    for (auto it2=range.first; it2!=range.second; ++it2) {
+      PHG4Particle* par_g4p = it2->second;
+      float par_px = par_g4p->get_px();
+      float par_py = par_g4p->get_py();
+      float par_pz = par_g4p->get_pz();
+      float par_p = std::sqrt(par_px*par_px+par_py*par_py+par_pz*par_pz);
+      float par_eta = calc_eta(par_p, par_pz);
+      float par_phi = std::atan2(par_py, par_pz);
+      float par_pt = std::sqrt(par_px*par_px+par_py*par_py);
+      float dr = std::sqrt((par_eta-eta)*(par_eta-eta)+(par_phi-phi)*(par_phi-phi));
+      if (dr < 0.3) iso3 += par_pt;
+      if (dr < 0.4) iso4 += par_pt;
+    }
+    iso3 -= pt;
+    iso4 -= pt;
+
+    m_truth_cluster_pt->push_back(pt);
+    m_truth_cluster_e->push_back(e);
+    m_truth_cluster_eta->push_back(eta);
+    m_truth_cluster_phi->push_back(phi);
+    m_truth_cluster_iso3->push_back(iso3);
+    m_truth_cluster_iso4->push_back(iso4);
+    nTruthClusters++;
+  }
+}
+
+
+PHG4Particle* CaloAna::g4_to_top(PHG4Particle* p)
+{
+  PHG4Particle* cur = p;
+  while(cur){
+    int parid = cur->get_parent_id();
+    if(parid <= 0) return cur; 
+
+    auto it = m_g4_by_id.find(parid);
+    if(it == m_g4_by_id.end()) return cur;
+
+    PHG4Particle* parent = it->second;
+    if(is_hadron(parent->get_pid())) return nullptr; 
+    cur = parent;
+  }
+  return nullptr;
+}
+
+HepMC::GenParticle* CaloAna::get_hepmc_particle(int barcode)
+{
+  auto it = m_hepmc_by_barcode.find(barcode);
+  if(it == m_hepmc_by_barcode.end()) return nullptr;
+  return it->second;
+}
+
+int CaloAna::find_hepmc_pdg(HepMC::GenParticle* p)
+{
+  if(!p) return 0;
+
+  HepMC::GenParticle* cur = p;
+
+  while(true){
+    HepMC::GenVertex* vtx = cur->production_vertex();
+    if(!vtx) break;
+
+    if(vtx->particles_in_const_begin() == vtx->particles_in_const_end())
+      break;
+
+    HepMC::GenParticle* parent = *(vtx->particles_in_const_begin());
+    if(!parent) break;
+
+    if(is_hadron(parent->pdg_id())) return parent->pdg_id();
+
+    cur = parent;
+  }
+
+  return cur->pdg_id();
+}
+float CaloAna::calc_eta(float p, float pz){
+  float d=p-std::fabs(pz);
+  if(p<=0||d<=0) return 0;
+  float n=p+std::fabs(pz);
+  float e=0.5*std::log(n/d);
+  return (pz<0 ? -e : e);
+}
+
+Double_t CaloAna::GetShiftedEta(float _vz, float _eta) {
+  double radius = 93;
+  double theta = 2*atan(exp(-_eta));
+  double z = radius / tan(theta);
+  double zshifted = z - _vz;
+  double thetashifted = atan2(radius,zshifted);
+  double etashifted = -log(tan(thetashifted/2.0));
+  return etashifted;
+}
+Double_t CaloAna::DeltaR(TLorentzVector pho1, TLorentzVector pho2) {
+  double phi1 = pho1.Phi();
+  double phi2 = pho2.Phi();
+  double eta1 = pho1.Eta();
+  double eta2 = pho2.Eta();
+  double dr = TMath::Sqrt((phi1-phi2)*(phi1-phi2) + (eta1-eta2)*(eta1-eta2));
+  return dr;
+}
+
+int CaloAna::End(PHCompositeNode* /*topNode*/) {
+  std::cout << "end..! " << std::endl;
+  std::cout << "Events with mbd vertex " << count_mbdvtx << " out of " << count << std::endl;
+  if(outfile){
+    outfile->cd();
+    towerntuple->Write();
+    outfile->Write();
+    outfile->Close();
+    delete outfile;
+    outfile=nullptr;
+  }
+  return 0;
+}

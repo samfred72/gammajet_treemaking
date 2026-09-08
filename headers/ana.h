@@ -66,23 +66,26 @@ class ana {
     ana();
     ~ana();
 
-    virtual Bool_t                        PassEtaCut(float eta, float vz); 
-    virtual Double_t                      GetShiftedEta(float _vz, float _eta);
-    virtual Float_t                       deltaR(float eta1, float eta2, float phi1, float phi2);
-    virtual Float_t                       deltaR(TLorentzVector pho1, TLorentzVector pho2);
-    virtual Float_t                       deltaR(pho_object obj1, jet_object obj2);
-    virtual Float_t                       deltaR(jet_object obj1, pho_object obj2);
-    virtual Float_t                       deltaR(jet_object obj1, jet_object obj2);
-    virtual Float_t                       deltaR(pho_object obj1, pho_object obj2);
-    virtual TH1D *                        combineMC(vector<TH1D*> hists, vector<int> samples, bool isphoton);
-    virtual TH2D *                        combineMC(vector<TH2D*> hists, vector<int> samples, bool isphoton);
-    virtual void                          drawAll(vector<string> samples, vector<string> features, float drawx, float drawy, int fontsize, bool isbig);
-    virtual float                         getPurity(float low, float high);
-    virtual vector<vector<vector<TH1D*>>> collect_hists(vector<TFile*> files, vector<int> samples, const char * histname, int ptbins, int jbins, bool isphoton);
+    virtual Bool_t   PassEtaCut(float eta, float vz); 
+    virtual Double_t GetShiftedEta(float _vz, float _eta);
+    virtual Float_t  deltaR(float eta1, float eta2, float phi1, float phi2);
+    virtual Float_t  deltaR(TLorentzVector pho1, TLorentzVector pho2);
+    virtual Float_t  deltaR(pho_object obj1, jet_object obj2);
+    virtual Float_t  deltaR(jet_object obj1, pho_object obj2);
+    virtual Float_t  deltaR(jet_object obj1, jet_object obj2);
+    virtual Float_t  deltaR(pho_object obj1, pho_object obj2);
+    virtual TH1D *   combineMC(vector<TH1D*> hists, vector<int> samples, bool isphoton);
+    virtual TH2D *   combineMC(vector<TH2D*> hists, vector<int> samples, bool isphoton);
+    virtual void     drawAll(vector<string> samples, vector<string> features, float drawx, float drawy, int fontsize, bool isbig);
+    virtual float    getPurity(float low, float high);
+    virtual void     drawEvent(TClonesArray * photons, TClonesArray * jets, int npho, int njet, int i);
+    virtual vector<vector<vector<vector<TH1D*>>>> collect_hists(vector<TFile*> files, vector<int> samples, const char * histname, int ptbins, int jbins, bool isphoton);
 
     float sPHENIX_posx = 0.6;
     float sPHENIX_posy = 0.85;
     float posy_diff = 0.05;
+    static constexpr size_t MaxClusters = 10000;
+    static constexpr size_t MaxJets = 10000;
 
     static const int nDims=7;
     static const int NHIST = nDims*nDims;
@@ -100,17 +103,18 @@ class ana {
     double etamin = -etacut;
     double etamax = etacut;
     const double minclustere = 7;
-    const float minjete02 =3;// 6.6;
-    const float minjete04 =3;// 7.6;
-    const float minjete06 =3;// 8;
-    const float minjete08 =3;// 12;
+    const vector<float> minjete = {3,3,3,3};
 
     static const int nPtBins = 6;
     static constexpr double ptBins[nPtBins+1] = {10,11,12,13,15,19,30};
     static const int nabcdbins = 20;
     static constexpr double abcdbins[nabcdbins+1] = {10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30};
+    static const int nIsoBdtBins = 3;
+    static constexpr double isoBins[nIsoBdtBins] = {2,2,2};
+    static constexpr double bdtBins[nIsoBdtBins] = {0.8, 0.7, 0.6};
     virtual Int_t findPtBin(double value);
     virtual Int_t findabcdBin(double value);
+    //virtual Int_t findIsoBdtBin(double iso, double bdt);
     static const int nJetR = 4;
     static constexpr double JetRs[nJetR] = {0.2, 0.4, 0.6, 0.8};
     

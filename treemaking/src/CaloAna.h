@@ -3,18 +3,21 @@
 
 // Utility
 #include <vector>
+#include <utility>
 #include <fstream>
 #include <TMath.h>
 #include <TRandom.h>
 #include <TFile.h>
 #include <TNtuple.h>
 #include <TTree.h>
+#include <TH1.h>
 #include <TH2.h>
 #include <TGraph2D.h>
 #include <TF2.h>
 #include <cassert>
 #include <sstream>
 #include <string>
+#include <algorithm>
 #include <TLorentzVector.h>
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_rng.h>  // for gsl_rng_uniform_pos
@@ -153,13 +156,24 @@ class CaloAna : public SubsysReco
   int process_event(PHCompositeNode *);
   int ProcessGlobalEventInfo(PHCompositeNode *);
   int ProcessTruth(PHCompositeNode *);
+  void ProcessFillTruthPhotonParticle(float truthvz);
+  PHG4Particle * g4_to_top(PHG4Particle*);
+  HepMC::GenParticle* get_hepmc_particle(int barcode);
+  int find_hepmc_pdg(HepMC::GenParticle* p);
   int process_towers(PHCompositeNode *);
+  void ProcessPhotonCandidate(RawClusterContainer *photons, Float_t &out_pt, Float_t &out_e,
+                               Float_t &out_eta, Float_t &out_phi, Float_t &out_time,
+                               Float_t out_showershape[12], Float_t &out_bdt_score);
+  void Clear();
 
   //! end of run method
   int End(PHCompositeNode *);
 
+  bool is_hadron(int pdg) {return (std::abs(pdg) >= 23 && std::abs(pdg) != 2212 ); }
+  float calc_eta(float p, float pz);
   Double_t GetShiftedEta(float _vz, float _eta);
-  Double_t DeltaR(TLorentzVector pho1, TLorentzVector pho2);
+  Double_t DeltaR(float x1, float x2, float y1, float y2);
+  Double_t smear_pt(int ijet, float pt_calib, const std::vector<float> &truth_pt_by_jet, int sign = 0);
 
   void SetIsMC(bool ismc) { isMC = ismc; };
   void SetMbdZVtxCut(float _zvtxcut)
@@ -186,6 +200,7 @@ class CaloAna : public SubsysReco
 
  protected:
   TRandom rand;
+  TH1D *h_jerband_quaddiff = nullptr; // pt-dependent JER resolution, same source smear_reco and smear_pt draw from
   std::string detector;
   std::string outfilename;
   Fun4AllHistoManager *hm = nullptr;
@@ -207,96 +222,130 @@ class CaloAna : public SubsysReco
   bool ScaledTriggerBit[64];
   bool LiveTriggerBit[64];
   int m_scaledowns[64];
-  bool istriggeredns = false;
-  bool istriggeredsp = false; 
   
-  int m_mbd_nhits_south = 0;
-  int m_mbd_nhits_north = 0;
-  float m_mbd_time_south;
-  float m_mbd_time_north;
+  float m_mbd_time;
+  float mbd_t0corr;
 
-  static const int Max_photon_size = 10000;
-  static const int Max_jet_size = 10000;
-  float cluster_emin = 7;
-  float jet_emin_cut = 3;
-  //float smear = 0.5;
-  //float smear = 0.085*0.7;
-  float smear = 0;
-  Short_t nPhotons = 0;
-  Short_t nClusters_sp = 0;
-  Short_t nClusters_ns = 0;
-  Short_t nTruthClusters = 0;
-  Short_t nJets02 = 0;
-  Short_t nJets04 = 0;
-  Short_t nJets06 = 0;
-  Short_t nJets08 = 0;
-  Short_t nTruthJets02 = 0;
-  Short_t nTruthJets04 = 0;
-  Short_t nTruthJets06 = 0;
-  Short_t nTruthJets08 = 0;
- 
-  TClonesArray * m_photon_4mom = new TClonesArray("TLorentzVector", Max_photon_size);
-  float m_photon_bdt_score[Max_photon_size];
+  float cluster_pt_cut = 10/1.011; // For EM Scale uncertainty
+  float jet_pt_cut = 3;
+  float jet_calib_pt_cut = 5;
+  static const int m_nRadii = 7;
+  // Index into m_radii/m_jet_nodenames for r=0.4, matched to AntiKt_unsubtracted_r04_calib_old
+  static const int m_oldCalibRadiusIndex = 2;
+  std::string m_jet_calib_old_nodename = "AntiKt_unsubtracted_r04_calib_old";
+  float smear[m_nRadii] =    {0.107, 0.107, 0.100, 0.097, 0.087, 0.097, 0.091};
+  float smearvar[m_nRadii] = {0.024, 0.024, 0.018, 0.021, 0.015, 0.012, 0.028};
+  
+  static constexpr float m_radii[m_nRadii] = {0.2,0.3,0.4,0.5,0.6,0.7,0.8};
+  std::string m_jet_nodenames[m_nRadii] = {
+    "AntiKt_unsubtracted_r02",
+    "AntiKt_unsubtracted_r03",
+    "AntiKt_unsubtracted_r04",
+    "AntiKt_unsubtracted_r05",
+    "AntiKt_unsubtracted_r06",
+    "AntiKt_unsubtracted_r07",
+    "AntiKt_unsubtracted_r08"
+  };
+  std::string m_jet_calib_nodenames[m_nRadii] = {
+    "AntiKt_unsubtracted_r02_calib",
+    "AntiKt_unsubtracted_r03_calib",
+    "AntiKt_unsubtracted_r04_calib",
+    "AntiKt_unsubtracted_r05_calib",
+    "AntiKt_unsubtracted_r06_calib",
+    "AntiKt_unsubtracted_r07_calib",
+    "AntiKt_unsubtracted_r08_calib"
+  };
+  std::string m_truth_jet_nodenames[m_nRadii] = {
+    "AntiKt_Truth_r02",
+    "AntiKt_Truth_r03",
+    "AntiKt_Truth_r04",
+    "AntiKt_Truth_r05",
+    "AntiKt_Truth_r06",
+    "AntiKt_Truth_r07",
+    "AntiKt_Truth_r08"
+  };
+  
+  bool hasthirdjet[m_nRadii] = { 0 };
+  Float_t m_hadron_p[m_nRadii] = { 0 };
+  Float_t m_jet_con_dr[m_nRadii] = { 0 };
 
-  TClonesArray * m_cluster_4mom_sp = new TClonesArray("TLorentzVector", Max_photon_size);
-  float m_cluster_showershape_sp[Max_photon_size][14];
-  float m_cluster_bdt_scores[Max_photon_size][11];
-  float m_cluster_time_sp[Max_photon_size];
-  float m_cluster_iso_e02_sp[Max_photon_size];
-  float m_cluster_iso_e04_sp[Max_photon_size];
-  float m_cluster_iso_e06_sp[Max_photon_size];
-  float m_cluster_iso_e08_sp[Max_photon_size];
-  TClonesArray * m_cluster_4mom_ns = new TClonesArray("TLorentzVector", Max_photon_size);
-  float m_cluster_showershape_ns[Max_photon_size][14];
-  float m_cluster_time_ns[Max_photon_size];
-  float m_cluster_iso_e02_ns[Max_photon_size];
-  float m_cluster_iso_e04_ns[Max_photon_size];
-  float m_cluster_iso_e06_ns[Max_photon_size];
-  float m_cluster_iso_e08_ns[Max_photon_size];
-  TClonesArray * m_truth_cluster_4mom = new TClonesArray("TLorentzVector", Max_photon_size);
-  float m_truth_cluster_time[Max_photon_size];
+  Float_t m_cluster_pt = 0;
+  Float_t m_cluster_e = 0;
+  Float_t m_cluster_eta = 0;
+  Float_t m_cluster_phi = 0;
+  Float_t m_cluster_time = 0;
+  Float_t m_cluster_showershape[14] = { 0 };
+  Float_t m_cluster_bdt_scores[11] = { 0 };
+  Float_t m_cluster_Z = { 0 };
 
-  TClonesArray * m_jet_4mom02 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_jet_emfrac02[Max_jet_size];
-  float m_jet_ihfrac02[Max_jet_size];
-  float m_jet_ohfrac02[Max_jet_size];
-  float m_jet_time02[Max_jet_size];
-  TClonesArray * m_jet_4mom04 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_jet_emfrac04[Max_jet_size];
-  float m_jet_ihfrac04[Max_jet_size];
-  float m_jet_ohfrac04[Max_jet_size];
-  float m_jet_time04[Max_jet_size];
-  TClonesArray * m_jet_4mom06 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_jet_emfrac06[Max_jet_size];
-  float m_jet_ihfrac06[Max_jet_size];
-  float m_jet_ohfrac06[Max_jet_size];
-  float m_jet_time06[Max_jet_size];
-  TClonesArray * m_jet_4mom08 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_jet_emfrac08[Max_jet_size];
-  float m_jet_ihfrac08[Max_jet_size];
-  float m_jet_ohfrac08[Max_jet_size];
-  float m_jet_time08[Max_jet_size];
-  TClonesArray * m_truth_jet_4mom02 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_truth_jet_emfrac02[Max_jet_size];
-  float m_truth_jet_ihfrac02[Max_jet_size];
-  float m_truth_jet_ohfrac02[Max_jet_size];
-  float m_truth_jet_time02[Max_jet_size];
-  TClonesArray * m_truth_jet_4mom04 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_truth_jet_emfrac04[Max_jet_size];
-  float m_truth_jet_ihfrac04[Max_jet_size];
-  float m_truth_jet_ohfrac04[Max_jet_size];
-  float m_truth_jet_time04[Max_jet_size];
-  TClonesArray * m_truth_jet_4mom06 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_truth_jet_emfrac06[Max_jet_size];
-  float m_truth_jet_ihfrac06[Max_jet_size];
-  float m_truth_jet_ohfrac06[Max_jet_size];
-  float m_truth_jet_time06[Max_jet_size];
-  TClonesArray * m_truth_jet_4mom08 = new TClonesArray("TLorentzVector", Max_jet_size);
-  float m_truth_jet_emfrac08[Max_jet_size];
-  float m_truth_jet_ihfrac08[Max_jet_size];
-  float m_truth_jet_ohfrac08[Max_jet_size];
-  float m_truth_jet_time08[Max_jet_size];
+  // Old BDT model, same (saturated) CEMC towers as the nominal cluster above --
+  // reads PHOTONCLUSTER_CEMC_OLD0 (see photon/oldphoton in Fun4All_macro.C /
+  // MCFun4All_macro.C). Present for both data and MC.
+  Float_t m_cluster_pt_old = 0;
+  Float_t m_cluster_e_old = 0;
+  Float_t m_cluster_eta_old = 0;
+  Float_t m_cluster_phi_old = 0;
+  Float_t m_cluster_time_old = 0;
+  Float_t m_cluster_showershape_old[12] = { 0 };
+  Float_t m_cluster_bdt_score_old = 0;
 
+  // MC-only: no-pixel-saturation CEMC branch (see MCFun4All_macro.C). Reads
+  // PHOTONCLUSTER_CEMC_NOSAT0, which doesn't exist for real data.
+  Float_t m_cluster_pt_nosat = 0;
+  Float_t m_cluster_e_nosat = 0;
+  Float_t m_cluster_eta_nosat = 0;
+  Float_t m_cluster_phi_nosat = 0;
+  Float_t m_cluster_time_nosat = 0;
+  Float_t m_cluster_showershape_nosat[12] = { 0 };
+  Float_t m_cluster_bdt_score_nosat = 0;
+
+  Float_t m_truth_cluster_pt = 0;
+  Float_t m_truth_cluster_e = 0;
+  Float_t m_truth_cluster_eta = 0;
+  Float_t m_truth_cluster_phi = 0;
+  Float_t m_truth_cluster_iso3 = 0;
+  Float_t m_truth_cluster_iso4 = 0;
+  Float_t m_truth_cluster_time = 0;
+
+  Float_t m_jet_pt           [m_nRadii];
+  Float_t m_jet_pt_calib     [m_nRadii];
+  Float_t m_jet_pt_recalib   [m_nRadii];
+  // Old JES calibration methodology, r=0.4 only (AntiKt_unsubtracted_r04_calib_old,
+  // see jetCalibOld in Fun4All_macro.C / MCFun4All_macro.C). Present for both data and MC.
+  Float_t m_jet_pt_old = 0;
+  Float_t m_jet_pt_smear_reco      [m_nRadii];
+  Float_t m_jet_pt_smear_high_reco [m_nRadii];
+  Float_t m_jet_pt_smear_low_reco  [m_nRadii];
+  Float_t m_jet_pt_smear_truth     [m_nRadii];
+  Float_t m_jet_pt_smear_high_truth[m_nRadii];
+  Float_t m_jet_pt_smear_low_truth [m_nRadii];
+  Float_t m_jet_e            [m_nRadii];
+  Float_t m_jet_eta          [m_nRadii];
+  Float_t m_jet_phi          [m_nRadii];
+  Float_t m_jet_emfrac       [m_nRadii];
+  Float_t m_jet_ihfrac       [m_nRadii];
+  Float_t m_jet_ohfrac       [m_nRadii];
+  Float_t m_jet_time         [m_nRadii];
+  Float_t m_3jet_pt          [m_nRadii];
+  Float_t m_3jet_dr          [m_nRadii];
+
+  Float_t m_truth_jet_pt     [m_nRadii];
+  Float_t m_truth_jet_e      [m_nRadii];
+  Float_t m_truth_jet_eta    [m_nRadii];
+  Float_t m_truth_jet_phi    [m_nRadii];
+  Float_t m_truth_jet_emfrac [m_nRadii]; 
+  Float_t m_truth_jet_ihfrac [m_nRadii];
+  Float_t m_truth_jet_ohfrac [m_nRadii];
+  Float_t m_truth_jet_time   [m_nRadii];
+
+
+  PHHepMCGenEventMap* m_genevtmap = nullptr;
+  PHG4TruthInfoContainer* m_truthinfo = nullptr;
+
+  std::unordered_map<int, HepMC::GenParticle*> m_hepmc_by_barcode;
+  std::unordered_map<int, PHG4Particle*> m_g4_by_id;
+  std::unordered_map<int, PHG4Particle*> m_g4_by_barcode;
+  std::unordered_set<int> m_seen_barcodes;
 };
 
 #endif

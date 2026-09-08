@@ -12,9 +12,8 @@ echo rsyncing from $this_dir
 echo running: $this_script $*
 
 TRIGGER=$1
-RANGE=$2
-SEGMENT=$3
-NAME=${TRIGGER}_${SEGMENT}
+SIM=$2
+NAME=${TRIGGER}_${SIM}
 
 source /opt/sphenix/core/bin/sphenix_setup.sh -n new
 source /opt/sphenix/core/bin/setup_local.sh /sphenix/user/samfred/projects/gammajet/install/
@@ -23,7 +22,7 @@ printenv
 
 echo "name..."
 echo $NAME
-hadd -f -k /sphenix/tg/tg01/jets/samfred/gammajet_MC_unsmear/run28_${NAME}.root /sphenix/tg/tg01/jets/samfred/gammajet_MC/*v${RANGE}*${TRIGGER}*
+hadd -f -k /sphenix/tg/tg01/jets/samfred/gammajet_full_hadded/gammajet_${SIM}_${TRIGGER}.root /sphenix/tg/tg01/jets/samfred/gammajet_MC/*${SIM}_${TRIGGER}.root
 
 echo all done
 echo "script done"

@@ -160,8 +160,8 @@ float ana::getPurity(float low, float high) {
   return val;
 }
 
-vector<vector<vector<TH1D*>>> ana::collect_hists(vector<TFile*> files, vector<int> samples, const char * histname, int ptbins, int jbins, bool isphoton = 0) {
-  vector<vector<vector<TH1D*>>> hists(ptbins, vector<vector<TH1D*>>(jbins, vector<TH1D*>(4)));
+vector<vector<vector<vector<TH1D*>>>> ana::collect_hists(vector<TFile*> files, vector<int> samples, const char * histname, int ptbins, int jbins, bool isphoton = 0) {
+  vector<vector<vector<vector<TH1D*>>>> hists(ptbins, vector<vector<vector<TH1D*>>>(jbins, vector<vector<TH1D*>>(nIsoBdtBins, vector<TH1D*>(4))));
   if (files.size() == 0) {
     cout << "Collecting hists requires at least one file!" << endl;
     return hists;
@@ -174,9 +174,11 @@ vector<vector<vector<TH1D*>>> ana::collect_hists(vector<TFile*> files, vector<in
   if (samples.size() == 0) { // its data!
     for (int i = 0; i < ptbins; i++) {
       for (int j = 0; j < jbins; j++) {
-        for (int k = 0; k < 4; k++) {
-          hists[i][j][k] = (TH1D*)files[0]->Get(Form("%s_%i_%i_%i", histname,i,j,k));
-          hists[i][j][k]->Rebin(nrebin); 
+        for (int l = 0; l < nIsoBdtBins; l++) {
+          for (int k = 0; k < 4; k++) {
+            hists[i][j][l][k] = (TH1D*)files[0]->Get(Form("%s_%i_%i_%i_%i", histname,i,j,l,k));
+            hists[i][j][l][k]->Rebin(nrebin); 
+          }
         }
       }
     }
@@ -185,19 +187,55 @@ vector<vector<vector<TH1D*>>> ana::collect_hists(vector<TFile*> files, vector<in
     int rebin = (isphoton ? nprebin : njrebin);
     for (int i = 0; i < ptbins; i++) {
       for (int j = 0; j < jbins; j++) {
-        for (int k = 0; k < 4; k++) {
-          // Photon samples 
-          vector<TH1D*> mchists;
-          for (int ifile = 0; ifile < files.size(); ifile++) {
-            mchists.push_back((TH1D*)files[ifile]->Get(Form("%s_%i_%i_%i",histname,i,j,k)));
-            mchists[ifile]->SetName(Form("hratio_%i_%i_%i_%i_%i",i,j,k,ifile,isphoton));
-            mchists[ifile]->Rebin(nrebin);
+        for (int l = 0; l < nIsoBdtBins; l++) {
+          for (int k = 0; k < 4; k++) {
+            // Photon samples 
+            vector<TH1D*> mchists;
+            for (int ifile = 0; ifile < files.size(); ifile++) {
+              mchists.push_back((TH1D*)files[ifile]->Get(Form("%s_%i_%i_%i_%i",histname,i,j,l,k)));
+              mchists[ifile]->SetName(Form("hratio_%i_%i_%i_%i_%i",i,j,k,ifile,isphoton));
+              mchists[ifile]->Rebin(nrebin);
+            }
+            hists[i][j][l][k] = combineMC(mchists,samples,isphoton);
+            hists[i][j][l][k]->Rebin(rebin);
           }
-          hists[i][j][k] = combineMC(mchists,samples,isphoton);
-          hists[i][j][k]->Rebin(rebin);
         }
       }
     }
   }
   return hists;
+}
+
+void ana::drawEvent(TClonesArray * photons, TClonesArray * jets, int npho, int njet, int i) {
+  TCanvas * c = new TCanvas(Form("c%i",i),"",400,900);
+
+  jet_object maxjet;
+  for (int i = 0; i < njet; i++) {
+    TLorentzVector jet = *(TLorentzVector*)jets->At(i);
+    jet_object obj = make_jet(jet,0,0,0,0);
+    TMarker* jet1 = new TMarker(obj.eta,obj.phi, 24);
+    jet1->SetMarkerSize(14);
+    jet1->SetMarkerColor(kBlack);
+    jet1->Draw();
+    if (obj.pt > maxjet.pt) maxjet = obj;
+  }
+  TMarker* jet2 = new TMarker(maxjet.eta,maxjet.phi, 20);
+  jet2->SetMarkerSize(14);
+  jet2->SetMarkerColorAlpha(kRed,.8);
+  jet2->Draw();
+
+  pho_object maxpho;
+  for (int i = 0; i < npho; i++) {
+    TLorentzVector pho = *(TLorentzVector*)photons->At(i);
+    pho_object obj = make_pho(pho,0,0,0,0);
+    TMarker* star1 = new TMarker(obj.eta,obj.phi, 29);
+    star1->SetMarkerSize(1.5);
+    star1->SetMarkerColor(kBlue);
+    star1->Draw();
+    if (obj.pt > maxpho.pt) maxpho = obj;
+  }
+  TMarker* star2 = new TMarker(maxpho.eta,maxpho.phi, 29);
+  star2->SetMarkerSize(1.4);
+  star2->SetMarkerColor(kGreen);
+  star2->Draw();
 }

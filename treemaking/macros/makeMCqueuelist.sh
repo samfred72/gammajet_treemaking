@@ -1,8 +1,13 @@
 #/bin/bash
-rm queue.list
-touch queue.list
-for i in `cat MCrunlist.list`; do
-  for j in `cat /sphenix/user/samfred/projects/queuelists/masterqueue_pythia28_$i.list`;do
-    echo $j $i >> queue.list
+rm MCqueue.list
+touch MCqueue.list
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ $line == "#"* ]]; then
+    continue
+  fi
+  read -r SIM TYPE remaining_text <<< "$line"
+  for j in `cat /sphenix/user/samfred/projects/queuelists/masterqueue_${SIM}28_${TYPE}.list`;do
+    echo $SIM $j $TYPE >> MCqueue.list
   done
-done
+done < "MCrunlist.list"
+

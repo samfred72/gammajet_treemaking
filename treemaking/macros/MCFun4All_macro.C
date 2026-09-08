@@ -16,6 +16,7 @@
 
 #include <G4_Global.C>
 #include <GlobalVariables.C>
+#include <G4_TopoClusterReco.C>
 #include <mbd/MbdReco.h>
 #include <zdcinfo/ZdcReco.h>
 #include <globalvertex/GlobalVertexReco.h>
@@ -40,11 +41,13 @@
 #include <caloreco/RawClusterPositionCorrection.h>
 #include <caloreco/TowerInfoDeadHotMask.h>
 #include <caloreco/PhotonClusterBuilder.h>
+#include <calowaveformsim/CaloWaveformSim.h>
 #include <clusteriso/ClusterIso.h>
 
 #include <jetbase/JetReco.h>
 #include <jetbase/TowerJetInput.h>
 #include <jetbase/FastJetAlgo.h>
+#include <jetbase/JetCalib.h>
 #include <jetbackground/CopyAndSubtractJets.h>
 #include <jetbackground/DetermineTowerBackground.h>
 #include <jetbackground/FastJetAlgoSub.h>
@@ -69,6 +72,7 @@
 #include <calotrigger/MinimumBiasClassifier.h>
 
 #include "HIJetReco.C"
+#include "G4_CEmc_Spacal_local.C"
 #include <Calo_Calib.C>
 
 #include <sstream>
@@ -81,6 +85,7 @@
 R__LOAD_LIBRARY(libfun4all.so)
 R__LOAD_LIBRARY(libfun4allraw.so)
 R__LOAD_LIBRARY(libcalo_reco.so)
+R__LOAD_LIBRARY(libCaloWaveformSim.so)
 R__LOAD_LIBRARY(libcaloana.so)
 R__LOAD_LIBRARY(libmbd.so)
 R__LOAD_LIBRARY(libffamodules.so)
@@ -99,7 +104,7 @@ R__LOAD_LIBRARY(libFROG.so)
 
 #endif
 
-void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28/pythia_MC/queue_28_v00000.list", bool test=true, const char * trigger="MC")
+void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28/pythia_MC/queue_28_v00000.list", bool test=true, const char * trigger="MC", const char * sim = "pythia")
 {
 
     //=====================
@@ -144,7 +149,7 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
       outfile = "/sphenix/user/samfred/projects/gammajet/treemaking/macros/testtree.root";
     }
     else {
-      outfile = Form("%s/outtree_%s_%s.root",outdir.c_str(),fname.c_str(),trigger);
+      outfile = Form("%s/outtree_%s_%s_%s.root",outdir.c_str(),fname.c_str(),sim, trigger);
     }
 
     Fun4AllServer *se = Fun4AllServer::instance();
@@ -156,6 +161,7 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
     pair<int, int> runseg = Fun4AllUtils::GetRunSegment(infile_global.at(0).c_str());
     int runnumber = runseg.first;
     int segment = runseg.second;
+    cout << "Runnumber and segment: " << runnumber << " " << segment << endl;
 
     //=====================
     // conditions DB flags
@@ -178,68 +184,175 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
     // Calo Calib
     //====================
     Process_Calo_Calib();
+    
+    // topoClustering in all three layers
+    RawClusterBuilderTopo* topoClusterBuilder = new RawClusterBuilderTopo("RawClusterBuilderTopo");
+    topoClusterBuilder->Verbosity(verbosity);
+    topoClusterBuilder->set_nodename("TOPOCLUSTER_ALLCALO");
+    topoClusterBuilder->set_enable_HCal(true);
+    topoClusterBuilder->set_enable_EMCal(true);
+    topoClusterBuilder->set_noise(0.0053, 0.0351, 0.0684);
+    topoClusterBuilder->set_significance(4.0, 2.0, 1.0);
+    topoClusterBuilder->allow_corner_neighbor(true);
+    topoClusterBuilder->set_do_split(true);
+    topoClusterBuilder->set_minE_local_max(1.0, 2.0, 0.5);
+    topoClusterBuilder->set_R_shower(0.025);
+    topoClusterBuilder->set_use_only_good_towers(true);
+    topoClusterBuilder->set_absE(true);
+    se->registerSubsystem(topoClusterBuilder);
+
+    //====================
+    // No-saturation CEMC branch
+    //====================
+    // DST_CALO_CLUSTER already has CEMC towers with the SiPM pixel-saturation
+    // nonlinearity baked in (applied upstream, during official MC production).
+    // To get a genuinely saturation-free comparison we re-digitize CEMC from the
+    // G4Hits, which are already loaded below via the input manager named
+    // "DST_TRUTH" (that name is a holdover -- per the file list parsing above,
+    // dst3/infile_truth is actually the G4Hits file, see queue-list column order).
+    //
+    // Built by calling CEMC_Towers() from our own copy of the official
+    // sPHENIX-Collaboration/macros common/G4_CEmc_Spacal.C (see
+    // G4_CEmc_Spacal_local.C), rather than reimplementing the CaloWaveformSim ->
+    // CaloTowerBuilder -> CaloTowerStatus -> CaloTowerCalib chain by hand, so every
+    // setting matches the official configuration exactly except for the two lines
+    // in that file's CEMC_Towers() (marked "NOSAT") that turn off pixel saturation:
+    // set_use_sipm_occupancy(false) and set_use_photon_statistics(false) -- see
+    // CaloWaveformSim.cc, both guarded by "m_use_sipm_occupancy && m_dettype ==
+    // CaloTowerDefs::CEMC"; CEMC-only. That copy also renames every SubsysReco/node
+    // with a "_NoSat"/"NOSAT_" suffix so it can't collide with the saturated CEMC
+    // towers already loaded from DST_CALO_CLUSTER.
+    Enable::CEMC_TOWERINFO = true;               // else-branch of CEMC_Towers() -> CaloWaveformSim path
+    Input::BEAM_CONFIGURATION = Input::pp_COLLISION;  // -> pedestal_scale(0.77), matches this pp Run28 sample
+    CEMC_Towers();
+    std::string emc_prof_nosat = getenv("CALIBRATIONROOT");
+    emc_prof_nosat += "/EmcProfile/CEMCprof_Thresh30MeV.root";
+    RawClusterBuilderTemplate *ClusterBuilderNoSat = new RawClusterBuilderTemplate("EmcRawClusterBuilderTemplate_NoSat");
+    ClusterBuilderNoSat->Detector("CEMC");
+    ClusterBuilderNoSat->set_threshold_energy(0.070);  // matches Process_Calo_Calib()'s nominal CEMC cluster builder
+    ClusterBuilderNoSat->LoadProfile(emc_prof_nosat);
+    ClusterBuilderNoSat->set_UseTowerInfo(1);   // to use towerinfo objects rather than old RawTower
+    ClusterBuilderNoSat->set_UseAltZVertex(1);  // Use MBD Vertex for vertex-based corrections
+    ClusterBuilderNoSat->setInputTowerNodeName("TOWERINFO_CALIB_NOSAT_CEMC");
+    ClusterBuilderNoSat->setOutputClusterNodeName("CLUSTERINFO_CEMC_NOSAT");
+    se->registerSubsystem(ClusterBuilderNoSat);
+
     //Mother cluster
-    std::string emc_prof = getenv("CALIBRATIONROOT");
-    emc_prof += "/EmcProfile/CEMCprof_Thresh30MeV.root";
-    RawClusterBuilderTemplate *ClusterBuilderMother = new RawClusterBuilderTemplate("EmcRawClusterBuilderTemplateMother");
-    ClusterBuilderMother->Detector("CEMC");
-    ClusterBuilderMother->set_threshold_energy(0.070);  // for when using basic calibration
-    ClusterBuilderMother->LoadProfile(emc_prof);
-    ClusterBuilderMother->set_UseTowerInfo(1);  // to use towerinfo objects rather than old RawTower
-    ClusterBuilderMother->setOutputClusterNodeName("CEMC_CLUSTERINFO_MOTHER");
-    ClusterBuilderMother->setSubclusterSplitting(false);
-    ClusterBuilderMother->Verbosity(1);
-    se->registerSubsystem(ClusterBuilderMother);
+    //std::string emc_prof = getenv("CALIBRATIONROOT");
+    //emc_prof += "/EmcProfile/CEMCprof_Thresh30MeV.root";
+    //RawClusterBuilderTemplate *ClusterBuilderMother = new RawClusterBuilderTemplate("EmcRawClusterBuilderTemplateMother");
+    //ClusterBuilderMother->Detector("CEMC");
+    //ClusterBuilderMother->set_threshold_energy(0.070);  // for when using basic calibration
+    //ClusterBuilderMother->LoadProfile(emc_prof);
+    //ClusterBuilderMother->set_UseTowerInfo(1);  // to use towerinfo objects rather than old RawTower
+    //ClusterBuilderMother->setOutputClusterNodeName("CEMC_CLUSTERINFO_MOTHER");
+    //ClusterBuilderMother->setSubclusterSplitting(false);
+    //ClusterBuilderMother->Verbosity(1);
+    //se->registerSubsystem(ClusterBuilderMother);
 
     //====================
     // Photon reco
     //====================
-    PhotonClusterBuilder *photon0 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon1 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon2 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon3 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon4 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon5 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon6 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon7 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon8 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon9 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon10 = new PhotonClusterBuilder();
-    PhotonClusterBuilder * photon[11] = {photon0,photon1,photon2,photon3,photon4,photon5,photon6,photon7,photon8,photon9,photon10};
+    //PhotonClusterBuilder *photon0 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon1 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon2 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon3 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon4 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon5 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon6 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon7 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon8 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon9 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon10 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder * photon[11] = {photon0,photon1,photon2,photon3,photon4,photon5,photon6,photon7,photon8,photon9,photon10};
+    PhotonClusterBuilder * photon[1] = {new PhotonClusterBuilder()};
+    PhotonClusterBuilder * oldphoton[1] = {new PhotonClusterBuilder()};
+    // "not old" builder version, run on the no-pixel-saturation CEMC branch above
+    PhotonClusterBuilder * photon_nosat[1] = {new PhotonClusterBuilder()};
 
-    string paths[11] = {
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2E_single_tmva.root",
+
+    //string paths[11] = {
+    string oldpaths[1] = {
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2E_split_single_tmva.root",
+      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_insitu_E_single_tmva.root",
+    };
+    //string paths[11] = {
+    string paths[1] = {
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2E_single_tmva.root",
       "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_insitu_E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_insitu_E_single_tmva.root",
     };
     vector<vector<string>> features = {
-      {"vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
-      {"weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35"},
-      {"ET","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"ET","vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
-      {"ET","weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
+      //{"weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35"},
+      //{"ET","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"ET","vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
+      //{"ET","weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
       {"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35"},
-      {"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35","w32","w52","w72","e11_over_e22","e11_over_e13","e11_over_e15","e11_over_e17","e11_over_e31","e11_over_e51","e11_over_e71","e22_over_e33","e22_over_e35","e22_over_e37","e22_over_e53"}
+      //{"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35","w32","w52","w72","e11_over_e22","e11_over_e13","e11_over_e15","e11_over_e17","e11_over_e31","e11_over_e51","e11_over_e71","e22_over_e33","e22_over_e35","e22_over_e37","e22_over_e53"}
     };
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < features.size(); i++) {
       photon[i]->set_output_photon_node(Form("PHOTONCLUSTER_CEMC%i",i));
       photon[i]->set_do_bdt(true);
       photon[i]->set_bdt_model_file(paths[i].c_str());
       photon[i]->set_bdt_feature_list(features[i]);
       photon[i]->set_ET_threshold(5.0);
+      photon[i]->set_do_topocluster_isolation(true);
+      photon[i]->set_topocluster_node("TOPOCLUSTER_ALLCALO");
       se->registerSubsystem(photon[i]);
+      
+      oldphoton[i]->set_output_photon_node(Form("PHOTONCLUSTER_CEMC_OLD%i",i));
+      oldphoton[i]->set_do_bdt(true);
+      oldphoton[i]->set_bdt_model_file(oldpaths[i].c_str());
+      oldphoton[i]->set_bdt_feature_list(features[i]);
+      oldphoton[i]->set_ET_threshold(5.0);
+      oldphoton[i]->set_do_topocluster_isolation(true);
+      oldphoton[i]->set_topocluster_node("TOPOCLUSTER_ALLCALO");
+      se->registerSubsystem(oldphoton[i]);
+
+      // "not old" PhotonClusterBuilder, run on the no-pixel-saturation CEMC branch.
+      // set_input_tower_node is a new setter (not upstream yet) added specifically
+      // so this can read TOWERINFO_CALIB_NOSAT_CEMC for its shower-shape/BDT ring
+      // features (et1-et4, e11_over_e33, ...) instead of the hardcoded default
+      // "TOWERINFO_CALIB_CEMC" -- without it those features would silently come
+      // from the saturated towers even though the cluster itself was built from
+      // no-saturation towers. See PhotonClusterBuilder.cc's InitRun().
+      photon_nosat[i]->set_input_cluster_node("CLUSTERINFO_CEMC_NOSAT");
+      photon_nosat[i]->set_input_tower_node("TOWERINFO_CALIB_NOSAT_CEMC");
+      photon_nosat[i]->set_output_photon_node(Form("PHOTONCLUSTER_CEMC_NOSAT%i",i));
+      photon_nosat[i]->set_do_bdt(true);
+      photon_nosat[i]->set_bdt_model_file(paths[i].c_str());
+      photon_nosat[i]->set_bdt_feature_list(features[i]);
+      photon_nosat[i]->set_ET_threshold(5.0);
+      photon_nosat[i]->set_do_topocluster_isolation(true);
+      // NOTE: TOPOCLUSTER_ALLCALO is still built from the saturated default CEMC
+      // towers (RawClusterBuilderTopo only supports one shared input-node prefix
+      // across EMCal+HCal, so it can't mix a no-sat EMCal with nominal HCal).
+      // This only affects the topocluster_iso03/04 output variables, which are
+      // NOT in the BDT feature list above -- it does not affect the BDT score.
+      photon_nosat[i]->set_topocluster_node("TOPOCLUSTER_ALLCALO");
+      se->registerSubsystem(photon_nosat[i]);
     }
 
     //====================
@@ -257,7 +370,7 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
     //====================
     // Jet reco
     //====================
-    std::vector<float> doUnsubJet_radius = {0.2,0.4,0.6,0.8};
+    std::vector<float> doUnsubJet_radius = {0.2,0.3,0.4,0.5,0.6,0.7,0.8};
 
     // retowering
     std::string jetreco_input_prefix = "TOWERINFO_CALIB";
@@ -281,6 +394,27 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
     _jetRecoUnsub->set_input_node("TOWER");
     _jetRecoUnsub->Verbosity(verbosity);
     se->registerSubsystem(_jetRecoUnsub);
+
+    std::string jesCalibFile = "/sphenix/user/hanpuj/JES_MC_Calibration/offline/JES_Calibration_Final.root";
+    for (int ir = 0; ir < doUnsubJet_radius.size(); ++ir) {
+      cout << "Input: " << Form("AntiKt_unsubtracted_r0%i",(int)(doUnsubJet_radius[ir]*10)) << endl;
+      cout << "Output: " << Form("AntiKt_unsubtracted_r0%i_calib",(int)(doUnsubJet_radius[ir]*10)) << endl << endl;
+      JetCalib * jetCalib = new JetCalib(Form("JetCalib0%i",(int)(doUnsubJet_radius[ir]*10)));
+      jetCalib->set_InputNode(Form("AntiKt_unsubtracted_r0%i",(int)(doUnsubJet_radius[ir]*10)));
+      jetCalib->set_OutputNode(Form("AntiKt_unsubtracted_r0%i_calib",(int)(doUnsubJet_radius[ir]*10)));
+      jetCalib->set_JetRadius(doUnsubJet_radius[ir]);
+      jetCalib->set_ApplyResidualCalib(true);  // z-vertex + eta residual correction
+      jetCalib->set_CalibFile(jesCalibFile);   // local file; remove once the CDB payload is updated
+      se->registerSubsystem(jetCalib);
+    }
+    JetCalib * jetCalibOld = new JetCalib(Form("JetCalibOld04"));
+    jetCalibOld->set_InputNode(Form("AntiKt_unsubtracted_r04"));
+    jetCalibOld->set_OutputNode(Form("AntiKt_unsubtracted_r04_calib_old"));
+    jetCalibOld->set_JetRadius(doUnsubJet_radius[2]);
+    jetCalibOld->set_UseEMfracCalib(false);
+    jetCalibOld->set_ApplyZvrtxDependentCalib(true);
+    jetCalibOld->set_ApplyEtaDependentCalib(true);
+    se->registerSubsystem(jetCalibOld);
     
 
     //======================
@@ -331,7 +465,7 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
 
     std::cout << "now run..." << std::endl;
     if (test) {
-      se->run(10000);
+      se->run(100);
     }
     else {
       se->run();

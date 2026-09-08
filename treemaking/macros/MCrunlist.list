@@ -1,9 +1,19 @@
-Photon5
-Photon10
-Photon20
-Jet5
-Jet10
-Jet20
-Jet30
-Jet50
-Jet70
+pythia MB
+#pythia Photon5
+#pythia Photon10
+#pythia Photon20
+#herwig Photon5
+#herwig Photon10
+#herwig Photon20
+pythia Jet5
+pythia Jet8
+#pythia Jet12
+#pythia Jet20
+#pythia Jet30
+#pythia Jet50
+#pythia Jet60
+#pythia Jet80
+#pythia Jet12_long
+#pythia Photon5_double
+#pythia Photon10_double
+#pythia Photon20_double

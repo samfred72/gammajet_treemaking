@@ -1,0 +1,11 @@
+pythia Photon5
+pythia Photon10
+pythia Photon20
+pythia Jet5
+pythia Jet10
+pythia Jet20
+pythia Jet30
+pythia Jet50
+pythia Jet70
+herwig PhotonJet5
+herwig PhotonJet10

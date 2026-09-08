@@ -16,6 +16,7 @@
 
 #include <G4_Global.C>
 #include <GlobalVariables.C>
+#include <G4_TopoClusterReco.C>
 #include <mbd/MbdReco.h>
 #include <zdcinfo/ZdcReco.h>
 #include <globalvertex/GlobalVertexReco.h>
@@ -45,6 +46,7 @@
 #include <jetbase/JetReco.h>
 #include <jetbase/TowerJetInput.h>
 #include <jetbase/FastJetAlgo.h>
+#include <jetbase/JetCalib.h>
 #include <jetbackground/CopyAndSubtractJets.h>
 #include <jetbackground/DetermineTowerBackground.h>
 #include <jetbackground/FastJetAlgoSub.h>
@@ -176,6 +178,7 @@ void Fun4All_macro(const char* infile="/sphenix/user/samfred/projects/filelists/
     se->Verbosity(verbosity);
     recoConsts *rc = recoConsts::instance();
 
+    CDBInterface::instance()->Verbosity(1);
     pair<int, int> runseg = Fun4AllUtils::GetRunSegment(firstfilename.c_str());
     int runnumber = runseg.first;
     int segment = runseg.second;
@@ -204,68 +207,114 @@ void Fun4All_macro(const char* infile="/sphenix/user/samfred/projects/filelists/
     // Calo Calib
     //====================
     Process_Calo_Calib();
+    RawClusterBuilderTopo* topoClusterBuilder = new RawClusterBuilderTopo("RawClusterBuilderTopo");
+    topoClusterBuilder->Verbosity(verbosity);
+    topoClusterBuilder->set_nodename("TOPOCLUSTER_ALLCALO");
+    topoClusterBuilder->set_enable_HCal(true);
+    topoClusterBuilder->set_enable_EMCal(true);
+    topoClusterBuilder->set_noise(0.0053, 0.0351, 0.0684);
+    topoClusterBuilder->set_significance(4.0, 2.0, 1.0);
+    topoClusterBuilder->allow_corner_neighbor(true);
+    topoClusterBuilder->set_do_split(true);
+    topoClusterBuilder->set_minE_local_max(1.0, 2.0, 0.5);
+    topoClusterBuilder->set_R_shower(0.025);
+    topoClusterBuilder->set_use_only_good_towers(true);
+    topoClusterBuilder->set_absE(true);
+    se->registerSubsystem(topoClusterBuilder);
+    
     //Mother cluster
-    std::string emc_prof = getenv("CALIBRATIONROOT");
-    emc_prof += "/EmcProfile/CEMCprof_Thresh30MeV.root";
-    RawClusterBuilderTemplate *ClusterBuilderMother = new RawClusterBuilderTemplate("EmcRawClusterBuilderTemplateMother");
-    ClusterBuilderMother->Detector("CEMC");
-    ClusterBuilderMother->set_threshold_energy(0.070);  // for when using basic calibration
-    ClusterBuilderMother->LoadProfile(emc_prof);
-    ClusterBuilderMother->set_UseTowerInfo(1);  // to use towerinfo objects rather than old RawTower
-    ClusterBuilderMother->setOutputClusterNodeName("CEMC_CLUSTERINFO_MOTHER");
-    ClusterBuilderMother->setSubclusterSplitting(false);
-    ClusterBuilderMother->Verbosity(1);
-    se->registerSubsystem(ClusterBuilderMother);
+    // Disabled to match MCFun4All_macro.C: output node CEMC_CLUSTERINFO_MOTHER has
+    // no live consumer -- its only reader, TruthAna.cc, isn't wired into src/Makefile.am
+    // (grep of Makefile.am and every other .cc/.h in src/ turns up nothing).
+    //std::string emc_prof = getenv("CALIBRATIONROOT");
+    //emc_prof += "/EmcProfile/CEMCprof_Thresh30MeV.root";
+    //RawClusterBuilderTemplate *ClusterBuilderMother = new RawClusterBuilderTemplate("EmcRawClusterBuilderTemplateMother");
+    //ClusterBuilderMother->Detector("CEMC");
+    //ClusterBuilderMother->set_threshold_energy(0.070);  // for when using basic calibration
+    //ClusterBuilderMother->LoadProfile(emc_prof);
+    //ClusterBuilderMother->set_UseTowerInfo(1);  // to use towerinfo objects rather than old RawTower
+    //ClusterBuilderMother->setOutputClusterNodeName("CEMC_CLUSTERINFO_MOTHER");
+    //ClusterBuilderMother->setSubclusterSplitting(false);
+    //ClusterBuilderMother->Verbosity(1);
+    //se->registerSubsystem(ClusterBuilderMother);
 
     //====================
     // Photon reco
     //====================
-    PhotonClusterBuilder *photon0 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon1 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon2 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon3 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon4 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon5 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon6 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon7 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon8 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon9 = new PhotonClusterBuilder();
-    PhotonClusterBuilder *photon10 = new PhotonClusterBuilder();
-    PhotonClusterBuilder * photon[11] = {photon0,photon1,photon2,photon3,photon4,photon5,photon6,photon7,photon8,photon9,photon10};
+    //PhotonClusterBuilder *photon0 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon1 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon2 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon3 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon4 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon5 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon6 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon7 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon8 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon9 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder *photon10 = new PhotonClusterBuilder();
+    //PhotonClusterBuilder * photon[11] = {photon0,photon1,photon2,photon3,photon4,photon5,photon6,photon7,photon8,photon9,photon10};
+    PhotonClusterBuilder * photon[1] = {new PhotonClusterBuilder()};
+    PhotonClusterBuilder * oldphoton[1] = {new PhotonClusterBuilder()};
 
-    string paths[11] = {
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2E_single_tmva.root",
+    //string paths[11] = {
+    string oldpaths[1] = {
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2E_split_single_tmva.root",
+      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3E_split_single_tmva.root",
+    //  "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_insitu_E_single_tmva.root",
+    };
+    //string paths[11] = {
+    string paths[1] = {
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v0E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v1E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v2E_single_tmva.root",
       "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_base_v3E_single_tmva.root",
-      "/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_insitu_E_single_tmva.root",
+      //"/sphenix/user/shuhangli/ppg12/FunWithxgboost/binned_models/model_insitu_E_single_tmva.root",
     };
     vector<vector<string>> features = {
-      {"vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
-      {"weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35"},
-      {"ET","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"ET","vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
-      {"ET","weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
-      {"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
+      //{"weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35"},
+      //{"ET","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"ET","vertex_z","cluster_eta","e11_over_e33","et2","et3","et4"},
+      //{"ET","weta_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
+      //{"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4"},
       {"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35"},
-      {"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35","w32","w52","w72","e11_over_e22","e11_over_e13","e11_over_e15","e11_over_e17","e11_over_e31","e11_over_e51","e11_over_e71","e22_over_e33","e22_over_e35","e22_over_e37","e22_over_e53"}
+      //{"ET","weta_cogx","wphi_cogx","vertex_z","cluster_eta","e11_over_e33","et1","et2","et3","et4","e32_over_e35","w32","w52","w72","e11_over_e22","e11_over_e13","e11_over_e15","e11_over_e17","e11_over_e31","e11_over_e51","e11_over_e71","e22_over_e33","e22_over_e35","e22_over_e37","e22_over_e53"}
     };
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < features.size(); i++) {
       photon[i]->set_output_photon_node(Form("PHOTONCLUSTER_CEMC%i",i));
       photon[i]->set_do_bdt(true);
       photon[i]->set_bdt_model_file(paths[i].c_str());
       photon[i]->set_bdt_feature_list(features[i]);
       photon[i]->set_ET_threshold(5.0);
+      photon[i]->set_do_topocluster_isolation(true);
+      photon[i]->set_topocluster_node("TOPOCLUSTER_ALLCALO");
       se->registerSubsystem(photon[i]);
+
+      oldphoton[i]->set_output_photon_node(Form("PHOTONCLUSTER_CEMC_OLD%i",i));
+      oldphoton[i]->set_do_bdt(true);
+      oldphoton[i]->set_bdt_model_file(oldpaths[i].c_str());
+      oldphoton[i]->set_bdt_feature_list(features[i]);
+      oldphoton[i]->set_ET_threshold(5.0);
+      oldphoton[i]->set_do_topocluster_isolation(true);
+      oldphoton[i]->set_topocluster_node("TOPOCLUSTER_ALLCALO");
+      se->registerSubsystem(oldphoton[i]);
     }
 
     //====================
@@ -283,7 +332,7 @@ void Fun4All_macro(const char* infile="/sphenix/user/samfred/projects/filelists/
     //====================
     // Jet reco
     //====================
-    std::vector<float> doUnsubJet_radius = {0.2,0.4,0.6,0.8};
+    std::vector<float> doUnsubJet_radius = {0.2,0.3,0.4,0.5,0.6,0.7,0.8};
 
     // retowering
     std::string jetreco_input_prefix = "TOWERINFO_CALIB";
@@ -300,6 +349,7 @@ void Fun4All_macro(const char* infile="/sphenix/user/samfred/projects/filelists/
     _jetRecoUnsub->add_input(new TowerJetInput(Jet::CEMC_TOWERINFO_RETOWER, jetreco_input_prefix));
     _jetRecoUnsub->add_input(new TowerJetInput(Jet::HCALIN_TOWERINFO, jetreco_input_prefix));
     _jetRecoUnsub->add_input(new TowerJetInput(Jet::HCALOUT_TOWERINFO, jetreco_input_prefix));
+    std::string jesCalibFile = "/sphenix/user/hanpuj/JES_MC_Calibration/offline/JES_Calibration_Final.root";
     for (int ir = 0; ir < doUnsubJet_radius.size(); ++ir) {
       _jetRecoUnsub->add_algo(new FastJetAlgoSub(Jet::ANTIKT, doUnsubJet_radius[ir]), "AntiKt_unsubtracted_r0" + std::to_string((int)(10*doUnsubJet_radius[ir])));
     }
@@ -307,6 +357,26 @@ void Fun4All_macro(const char* infile="/sphenix/user/samfred/projects/filelists/
     _jetRecoUnsub->set_input_node("TOWER");
     _jetRecoUnsub->Verbosity(verbosity);
     se->registerSubsystem(_jetRecoUnsub);
+    
+    for (int ir = 0; ir < doUnsubJet_radius.size(); ++ir) {
+      cout << "Input: " << Form("AntiKt_unsubtracted_r0%i",(int)(doUnsubJet_radius[ir]*10)) << endl;
+      cout << "Output: " << Form("AntiKt_unsubtracted_r0%i_calib",(int)(doUnsubJet_radius[ir]*10)) << endl << endl;
+      JetCalib * jetCalib = new JetCalib(Form("JetCalib0%i",(int)(doUnsubJet_radius[ir]*10)));
+      jetCalib->set_InputNode(Form("AntiKt_unsubtracted_r0%i",(int)(doUnsubJet_radius[ir]*10)));
+      jetCalib->set_OutputNode(Form("AntiKt_unsubtracted_r0%i_calib",(int)(doUnsubJet_radius[ir]*10)));
+      jetCalib->set_JetRadius(doUnsubJet_radius[ir]);
+      jetCalib->set_ApplyResidualCalib(true);  // z-vertex + eta residual correction
+      jetCalib->set_CalibFile(jesCalibFile);   // local file; remove once the CDB payload is updated
+      se->registerSubsystem(jetCalib);
+    }
+    JetCalib * jetCalibOld = new JetCalib(Form("JetCalibOld04"));
+    jetCalibOld->set_InputNode(Form("AntiKt_unsubtracted_r04"));
+    jetCalibOld->set_OutputNode(Form("AntiKt_unsubtracted_r04_calib_old"));
+    jetCalibOld->set_JetRadius(doUnsubJet_radius[2]);
+    jetCalibOld->set_UseEMfracCalib(false);
+    jetCalibOld->set_ApplyZvrtxDependentCalib(true);
+    jetCalibOld->set_ApplyEtaDependentCalib(true);
+    se->registerSubsystem(jetCalibOld);
     
 
     //======================

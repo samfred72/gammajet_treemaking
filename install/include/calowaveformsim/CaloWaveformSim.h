@@ -1,0 +1,258 @@
+// Tell emacs that this is a C++ source
+//  -*- C++ -*-.
+/*!
+ * \file CaloWaveformSim.h
+ * \brief create waveform from hits, could also use for event overlay
+ * \author Shuhang Li <sli7@bnl.gov>
+ * \version $Revision:   $
+ * \date    $Date: $
+ */
+#ifndef G4WAVEFORMSIM_CALOWAVEFORMSIM_H
+#define G4WAVEFORMSIM_CALOWAVEFORMSIM_H
+
+#include <fun4all/SubsysReco.h>
+
+#include <calobase/TowerInfoDefs.h>
+#include <caloreco/CaloTowerDefs.h>
+
+#include <g4detectors/LightCollectionModel.h>
+
+#include <gsl/gsl_rng.h>
+
+#include <limits>
+#include <string>
+#include <vector>
+
+class PHCompositeNode;
+class TProfile;
+class PHG4Hit;
+class PHG4CylinderCellGeom_Spacalv1;
+class PHG4CylinderGeom_Spacalv3;
+class CDBTTree;
+class TowerInfoContainer;
+
+class CaloWaveformSim : public SubsysReco
+{
+ public:
+  CaloWaveformSim(const std::string &name = "CaloWaveformSim");
+  ~CaloWaveformSim() override;
+
+  int InitRun(PHCompositeNode *topNode) override;
+  int process_event(PHCompositeNode *topNode) override;
+
+  // Detector configuration
+  void set_detector_type(CaloTowerDefs::DetectorSystem dettype) { m_dettype = dettype; }
+  void set_detector(const std::string &detector) { m_detector = detector; }
+
+  // Calibration settings (data energy)
+  void set_fieldname(const std::string &fieldname)
+  {
+    m_fieldname = fieldname;
+  }
+  void set_calibName(const std::string &calibName)
+  {
+    m_calibName = calibName;
+  }
+  void set_directURL_calib(const std::string &url)
+  {
+    m_directURL = url;
+  }
+
+  // Calibration settings (MC energy)
+  void set_MC_fieldname(const std::string &MC_fieldname)
+  {
+    m_MC_fieldname = MC_fieldname;
+  }
+  void set_MC_calibName(const std::string &MC_calibName)
+  {
+    m_MC_calibName = MC_calibName;
+  }
+  void set_directURL_MCcalib(const std::string &url)
+  {
+    m_directURL_MC = url;
+  }
+
+  void set_use_sipm_occupancy(bool use_sipm_occupancy = true)
+  {
+    m_use_sipm_occupancy = use_sipm_occupancy;
+  }
+
+  void set_use_photon_statistics(bool state = true)
+  {
+    m_use_photon_statistics = state;
+  }
+
+  // Prefix for the output WAVEFORM_<detector> node this module creates
+  // (default "WAVEFORM_", matching the pre-existing behavior). Override this
+  // when the input node tree already has a WAVEFORM_<detector> node (e.g.
+  // baked into a G4Hits DST) that would otherwise collide with -- and
+  // silently win over -- this module's own output; m_detector itself must
+  // stay unchanged since it also names the G4HIT_<detector> input node and
+  // the <detector>_calib_ADC_to_ETower/-etc. CDB calibration fields.
+  void set_output_node_prefix(const std::string &prefix)
+  {
+    m_output_node_prefix = prefix;
+  }
+
+  // Time calibration (data)
+  void set_fieldname_time(const std::string &fieldname_time)
+  {
+    m_fieldname_time = fieldname_time;
+  }
+  void set_calibName_time(const std::string &calibName_time)
+  {
+    m_calibName_time = calibName_time;
+  }
+  void set_directURL_timecalib(const std::string &url)
+  {
+    m_directURL_time = url;
+  }
+  void set_dotimecalib(bool dotimecalib) { m_dotimecalib = dotimecalib; }
+
+  // Time calibration (MC)
+  void set_MC_fieldname_time(const std::string &MC_fieldname_time)
+  {
+    m_MC_fieldname_time = MC_fieldname_time;
+  }
+  void set_MC_calibName_time(const std::string &MC_calibName_time)
+  {
+    m_MC_calibName_time = MC_calibName_time;
+  }
+  void set_directURL_MCtimecalib(const std::string &url)
+  {
+    m_directURL_MC_time = url;
+  }
+  void set_smear_const(float val)
+  {
+    m_smear_const = true;
+    factor_const = val;
+  }
+
+  void set_kSamplingFraction(double val)
+  {
+    kSamplingFraction = val;
+  }
+  void set_kPhotoelectronsPerGeV(double val)
+  {
+    kPhotoelectronsPerGeV = val;
+  }
+  void set_kSiPMEffectivePixel(double val)
+  {
+    kSiPMEffectivePixel = val;
+  }
+
+  // Waveform template & sampling
+  void set_templatefile(const std::string &templatefile) { m_templatefile = templatefile; }
+  void set_nsamples(int nsamples) { m_nsamples = nsamples; }
+  void set_sampletime(float sampletime) { m_sampletime = sampletime; }
+  void set_nchannels(int nchannels) { m_nchannels = nchannels; }
+  void set_sampling_fraction(float fraction) { m_sampling_fraction = fraction; }
+
+  // Signal shaping parameters
+  void set_deltaT(float deltaT) { m_deltaT = deltaT; }
+  void set_timewidth(float timewidth) { m_timeshiftwidth = timewidth; }
+  void set_peakpos(float peakpos) { m_peakpos = peakpos; }
+  void set_highgain(bool highgain = true) { m_highgain = highgain; }
+  void set_gain(int gain) { m_gain = gain; }
+  void set_pedestal_scale(float scale) { m_pedestal_scale = scale; }
+
+  // Noise configuration
+  enum NoiseType
+  {
+    NOISE_NONE = 0,
+    NOISE_GAUSSIAN = 1,
+    NOISE_TREE = 2
+  };
+  void set_noise_type(NoiseType noiseType) { m_noiseType = noiseType; }
+  void set_fixpedestal(int fixpedestal) { m_fixpedestal = fixpedestal; }
+  void set_gaussian_noise(int gaussian_noise) { m_gaussian_noise = gaussian_noise; }
+
+  // Light collection model access
+  LightCollectionModel &get_light_collection_model() { return light_collection_model; }
+
+ private:
+  void CreateNodeTree(PHCompositeNode *topNode);
+  void maphitetaphi(PHG4Hit *g4hit,
+                    unsigned short &etabin,
+                    unsigned short &phibin,
+                    float &correction);
+  double template_function(double *x, double *par);
+
+  // function pointers for use different decoders for hcals and cemc
+  unsigned int (*encode_tower)(unsigned int, unsigned int){TowerInfoDefs::encode_emcal};
+  unsigned int (*decode_tower)(unsigned int){TowerInfoDefs::decode_emcal};
+
+  // containers
+  TowerInfoContainer *m_CaloWaveformContainer{nullptr};
+  TowerInfoContainer *m_PedestalContainer{nullptr};
+
+  CDBTTree *cdbttree{nullptr};
+  CDBTTree *cdbttree_MC{nullptr};
+  CDBTTree *cdbttree_time{nullptr};
+  CDBTTree *cdbttree_MC_time{nullptr};
+  TProfile *h_template{nullptr};
+
+  gsl_rng *m_RandomGenerator{nullptr};
+  PHG4CylinderCellGeom_Spacalv1 *geo{nullptr};
+  const PHG4CylinderGeom_Spacalv3 *layergeom{nullptr};
+
+  CaloTowerDefs::DetectorSystem m_dettype{CaloTowerDefs::DETECTOR_INVALID};
+
+  std::string m_detector;
+  std::string m_output_node_prefix{"WAVEFORM_"};
+
+  // Data energy calibration
+  std::string m_fieldname;
+  std::string m_calibName;
+  std::string m_directURL;
+
+  // MC energy calibration
+  std::string m_MC_fieldname;
+  std::string m_MC_calibName;
+  std::string m_directURL_MC;
+
+  bool m_smear_const{false};
+  float factor_const{0.};
+
+  // Data time calibration
+  std::string m_fieldname_time{"time"};
+  std::string m_calibName_time;
+  std::string m_directURL_time;
+  // MC time calibration
+  std::string m_MC_fieldname_time{"time"};
+  std::string m_MC_calibName_time;
+  std::string m_directURL_MC_time;
+
+  bool m_dotimecalib{true};
+
+  // Waveform settings
+  std::string m_templatefile{"waveformtemptempohcalcosmic.root"};
+  int m_nsamples{12};  // number of samples for calos in our default data taking configuration
+  float m_sampletime{50. / 3.};
+  int m_nchannels{-1};
+  float m_sampling_fraction{std::numeric_limits<float>::quiet_NaN()};
+
+  // Shaping & noise
+  int m_fixpedestal{1500};
+  int m_gaussian_noise{3};
+  float m_deltaT{100.};
+  float m_timeshiftwidth{0.};
+  bool m_highgain{false};
+  int m_gain{1};
+  float m_peakpos{6.};
+  float m_pedestal_scale{1.};
+
+  std::vector<std::vector<float>> m_waveforms;
+
+  LightCollectionModel light_collection_model;
+
+  bool m_use_photon_statistics{true};
+  bool m_use_sipm_occupancy{true};
+  double kSamplingFraction = 2e-2;
+  double kPhotoelectronsPerGeV = 500.;
+  double kSiPMEffectivePixel = 40000 * 4.;
+
+  NoiseType m_noiseType{NOISE_TREE};
+};
+
+#endif  // G4WAVEFORMSIM_CALOWAVEFORMSIM_H
