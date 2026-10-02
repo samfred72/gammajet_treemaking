@@ -34,10 +34,16 @@ int CaloAna::Init(PHCompositeNode*)
         break;
       }
     }
-    TFile fquaddiff("/sphenix/user/samfred/projects/gammajet/treemaking/macros/quaddiff_bi_nominal.root");
-    h_jerband_quaddiff = dynamic_cast<TH1D*>(fquaddiff.Get("h_jerband_quaddiff"));
-    if (h_jerband_quaddiff) h_jerband_quaddiff->SetDirectory(0);
-    else std::cerr << "CaloAna::Init - could not load h_jerband_quaddiff, jet pt smearing will be disabled" << std::endl;
+    // JER smearing templates (fractional sigma vs pt). Nominal/sysup/sysdown are each a full width curve.
+    TFile fjer("/sphenix/user/samfred/projects/gammajet/treemaking/macros/jerband_smearing_templates.root");
+    h_jer_smear_nominal = dynamic_cast<TH1D*>(fjer.Get("h_jer_smear_r04_pileup_EMfracJES_nominal"));
+    h_jer_smear_up      = dynamic_cast<TH1D*>(fjer.Get("h_jer_smear_r04_pileup_EMfracJES_sysup"));
+    h_jer_smear_down    = dynamic_cast<TH1D*>(fjer.Get("h_jer_smear_r04_pileup_EMfracJES_sysdown"));
+    if (!h_jer_smear_nominal || !h_jer_smear_up || !h_jer_smear_down)
+      throw std::runtime_error("could not load JER smearing templates from jerband_smearing_templates.root");
+    h_jer_smear_nominal->SetDirectory(0);
+    h_jer_smear_up     ->SetDirectory(0);
+    h_jer_smear_down   ->SetDirectory(0);
 
     InitOutputFile();
     InitTree();
@@ -119,7 +125,8 @@ void CaloAna::InitTree(){
   //towerntuple->Branch("jet_ohfrac",  m_jet_ohfrac  , "jet_ohfrac[7]/F");
   towerntuple->Branch("jet_time",    m_jet_time    , "jet_time[7]/F");
   towerntuple->Branch("thirdjet_pt", m_3jet_pt     , "thirdjet_pt[7]/F");
-  towerntuple->Branch("thirdjet_dr", m_3jet_dr     , "thirdjet_dr[7]/F");
+  towerntuple->Branch("thirdjet_eta",m_3jet_eta    , "thirdjet_eta[7]/F");
+  towerntuple->Branch("thirdjet_phi",m_3jet_phi    , "thirdjet_phi[7]/F");
   if (isMC) {
     towerntuple->Branch("jet_pt_smear_reco",m_jet_pt_smear_reco, "jet_pt_smear_reco[7]/F");
     towerntuple->Branch("jet_pt_smear_high_reco",m_jet_pt_smear_high_reco, "jet_pt_smear_high_reco[7]/F");
@@ -348,11 +355,14 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
     }
 
 
-    // for third jet systematics
+    // for third jet systematics: every jet that passes the pT prefilter, is outside the
+    // photon's cone, and (data) is in time. Only the leading one is stored as the recoil
+    // jet, and the highest of the rest as the third jet, so unfolder.cc can vary the veto
+    // threshold without storing a jet vector.
+    struct ThirdJetCand { unsigned ij; float pt, eta, phi; };
+    std::vector<ThirdJetCand> thirdjet_cands;
+    int ileadjet = -1;
     float maxjetpt = 0;
-    float thirdjetpt = 0;
-    float thirdjeteta = 0;
-    float thirdjetphi = 0;
     int npassingjets[m_nRadii] = { 0 };
 
     for (unsigned ij = 0; ij < _both_jets.size(); ij++) {
@@ -364,9 +374,9 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
       float pt_recalib = pt_calib/0.90;
       float eta = _jet->get_eta();
       float phi = _jet->get_phi();
-      float pt_smear_reco      = rand.Gaus(pt_calib, pt_calib*h_jerband_quaddiff->Interpolate(pt_calib));
-      float pt_smear_high_reco = rand.Gaus(pt_calib, pt_calib*(h_jerband_quaddiff->Interpolate(pt_calib) + h_jerband_quaddiff->GetBinError(h_jerband_quaddiff->FindBin(pt_calib))));
-      float pt_smear_low_reco  = rand.Gaus(pt_calib, pt_calib*(h_jerband_quaddiff->Interpolate(pt_calib) - h_jerband_quaddiff->GetBinError(h_jerband_quaddiff->FindBin(pt_calib))));
+      float pt_smear_reco      = rand.Gaus(pt_calib, pt_calib*h_jer_smear_nominal->Interpolate(pt_calib));
+      float pt_smear_high_reco = rand.Gaus(pt_calib, pt_calib*h_jer_smear_up     ->Interpolate(pt_calib));
+      float pt_smear_low_reco  = rand.Gaus(pt_calib, pt_calib*h_jer_smear_down   ->Interpolate(pt_calib));
 
       float pt_smear_truth      = smear_pt(ij, pt_calib, truth_pt_by_reco,  0);
       float pt_smear_high_truth = smear_pt(ij, pt_calib, truth_pt_by_reco, +1);
@@ -384,7 +394,6 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
           pt_smear_truth      < jet_calib_pt_cut && // JES and JER on truth
           pt_smear_high_truth < jet_calib_pt_cut && // JES and JER on truth+uncertainty
           pt_smear_low_truth  < jet_calib_pt_cut))) continue; // JES and JER on truth-uncertainty
-      npassingjets[ir]++;
       if (dr < m_radii[ir]) continue;
 
       float emcal_calo_e = 0;
@@ -430,11 +439,16 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
       }
       if (jet_time_count > 0) jet_time = (jet_time / jet_time_count)*17.6;
       else jet_time = -999;
-      if (!isMC && (m_mbd_time - jet_time > 4 || m_mbd_time - jet_time < 0)) continue;
+      // Jet timing window (data only): -2 < t_MBD - t_jet < 5 ns, widened from 0-4 ns (Oct 2026).
+      // The 0-4 ns window removed in-time jets with a pT- and EM-fraction-dependent efficiency
+      // (EMCal/HCal time offsets, oHCal energy dependence); the photon cluster keeps 0-4 ns.
+      if (!isMC && (m_mbd_time - jet_time > 5 || m_mbd_time - jet_time < -2)) continue;
+      // Counted only after the photon-cone and timing cuts, so out-of-time jets no longer
+      // veto data events (they never could in MC, which has no timing cut).
+      npassingjets[ir]++;
+      thirdjet_cands.push_back({ij, isMC ? pt_smear_truth : pt_calib, eta, phi});
       if (pt < maxjetpt) continue;
-      thirdjetpt = maxjetpt;
-      thirdjeteta = m_jet_eta[ir];
-      thirdjetphi = m_jet_phi[ir];
+      ileadjet = ij;
       maxjetpt = pt;
 
 
@@ -459,10 +473,20 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
       //m_jet_ohfrac  [ir] = (ohcal_calo_e/(emcal_calo_e + ihcal_calo_e + ohcal_calo_e));
       m_jet_time    [ir] = (jet_time);
     }
-    hasthirdjet[ir] = (npassingjets[ir] > 2);
-    if (hasthirdjet[ir]) {
-      m_3jet_pt[ir] = thirdjetpt;
-      m_3jet_dr[ir] = DeltaR(m_jet_eta[ir], m_jet_phi[ir], thirdjeteta, thirdjetphi);
+    // The photon's own jet is no longer counted, hence > 1 rather than the old > 2.
+    hasthirdjet[ir] = (npassingjets[ir] > 1);
+    // Highest-pT candidate other than the leading jet. The old version kept the previous
+    // leader whenever a new leader was found, which misses a true second jet that comes
+    // after the leader in the container (e.g. jets 10, 20, 15 stored 10, not 15).
+    const ThirdJetCand * third = nullptr;
+    for (const auto & c : thirdjet_cands) {
+      if ((int) c.ij == ileadjet) continue;
+      if (!third || c.pt > third->pt) third = &c;
+    }
+    if (third) {
+      m_3jet_pt[ir] = third->pt;
+      m_3jet_eta[ir] = third->eta;
+      m_3jet_phi[ir] = third->phi;
     }
   }
   
@@ -525,6 +549,11 @@ void CaloAna::Clear() {
     //m_jet_ihfrac  [ir] = 0;
     //m_jet_ohfrac  [ir] = 0;
     m_jet_time    [ir] = 0;
+    // Were never reset before, so events without a third jet carried the previous event's values.
+    hasthirdjet[ir] = 0;
+    m_3jet_pt  [ir] = 0;
+    m_3jet_eta [ir] = 0;
+    m_3jet_phi [ir] = 0;
   }
   if (isMC) {
 
@@ -872,7 +901,7 @@ Double_t CaloAna::DeltaR(float x1, float y1, float x2, float y2) {
 }
 
 Double_t CaloAna::smear_pt(int ijet, float pt_calib, const std::vector<float> &truth_pt_by_jet, int sign) {
-  if (!h_jerband_quaddiff || ijet < 0 || ijet >= (int)truth_pt_by_jet.size())
+  if (!h_jer_smear_nominal || ijet < 0 || ijet >= (int)truth_pt_by_jet.size())
     return pt_calib; // no histogram or out of range
   // Unmatched jets (truth_pt_by_jet < 0) fall back to pt_calib as the resolution-lookup
   // reference instead of skipping smearing entirely - same convention pt_smear_reco/
@@ -884,8 +913,8 @@ Double_t CaloAna::smear_pt(int ijet, float pt_calib, const std::vector<float> &t
   // at/below jet_calib_pt_cut in jet_pt_smear_truth.
   bool matched = truth_pt_by_jet.at(ijet) >= 0;
   float pt_ref = matched ? truth_pt_by_jet.at(ijet) : pt_calib;
-  float width = h_jerband_quaddiff->Interpolate(pt_ref)
-              + sign * h_jerband_quaddiff->GetBinError(h_jerband_quaddiff->FindBin(pt_ref));
+  const TH1D *h_width = (sign > 0) ? h_jer_smear_up : (sign < 0) ? h_jer_smear_down : h_jer_smear_nominal;
+  float width = h_width->Interpolate(pt_ref);
   //std::cout << "Smearing jet with pt: " << pt_calib << " with width: " << pt_ref << "*" << width << std::endl;
   return rand.Gaus(pt_calib, pt_ref*width);
 }

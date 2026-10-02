@@ -1,0 +1,107 @@
+LD_LIBRARY_PATH now /sphenix/user/samfred/projects/gammajet/install//lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/gcc/14.2.0-2f0a0/x86_64-el9/lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/gcc/14.2.0-2f0a0/x86_64-el9/lib64:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/binutils/2.40-acaab/x86_64-el9/lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/release/release_new/new.5/lib64:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/release/release_new/new.5/lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/utils/lib64:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/utils/lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/root-6.32.06/lib:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/geant4.10.07.p04/lib64:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/lhapdf-5.9.1/lib:/usr/local/lib64:/usr/lib64
+PATH now /cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/gcc/14.2.0-2f0a0/x86_64-el9/bin:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/binutils/2.40-acaab/x86_64-el9/bin:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/release/release_new/new.5/bin:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/utils/bin:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/bin:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/root-6.32.06/bin:/cvmfs/sphenix.sdcc.bnl.gov/alma9.2-gcc-14.2.0/opt/sphenix/core/geant4.10.07.p04/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+
+Processing /sphenix/user/samfred/projects/gammajet/timingana/macros/Fun4All_timing_dading.C("DST_CALOFITTING_run2pp_pro001_pcdb001_v001-00047352-00000.root","/sphenix/user/samfred/projects/gammajet/timingana/output/timing_dading_DST_CALOFITTING_run2pp_pro001_pcdb001_v001-00047352-00000_r04.root",0.4,200)...
+DST DST_CALOFITTING_run2pp_pro001_pcdb001_v001-00047352-00000.root -> run 47352 segment 0
+Calo Calib uses runnumber 47352
+Using timing CDB file: /gpfs/mnt/gpfs02/sphenix/user/dading/my_tower_time_calibrations/macro/timing_cdb/CEMC_timeCalib_run47352.root
+Using timing CDB file: /gpfs/mnt/gpfs02/sphenix/user/dading/my_tower_time_calibrations/macro/timing_cdb/HCALIN_timeCalib_run47352.root
+Using timing CDB file: /gpfs/mnt/gpfs02/sphenix/user/dading/my_tower_time_calibrations/macro/timing_cdb/HCALOUT_timeCalib_run47352.root
+Adding Geometry file
+Global Tag: ProdA_2024, domain: calo_geo, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/calo_geo/28/11/28111ce66a8e820e84f73d16c509ae7c_calogeo_v3.root
+status setters
+Calibrating EMCal
+Calibrating OHcal
+Calibrating IHcal
+Building clusters
+Global Tag: ProdA_2024, domain: EMCPROFILE, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/EMCPROFILE/d1/16/d1161a528a79daeefa653545a6842849_CEMCprof_Thresh30MeV.root
+TimingAna: run 47352, MBD t0 correction -0.501113 ns, jet R = 0.4
+Fun4AllServer::setRun(): run 47352 uses CDB TIMESTAMP 47352
+Creating MbdOut Node 
+Creating MbdPmtContainer Node 
+Global Tag: ProdA_2024, domain: MBD_STATUS, timestamp: 47352... reply: no file found for MBD_STATUS or MBD_STATUS_default
+Global Tag: ProdA_2024, domain: MBD_SAMPMAX, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_SAMPMAX/bc/f6/bcf63070342b683900a85b310826d31f_mbd_sampmax_47352.root
+Global Tag: ProdA_2024, domain: MBD_QFIT, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_QFIT/0f/91/0f91ee663394eba5a84baee033aa3016_mbd_qfit_47352.root
+Global Tag: ProdA_2024, domain: MBD_TT_T0, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_TT_T0/60/29/6029168b6bab7cd4be5958d91574aa3f_mbd_tt_t0_45026_v2.root
+Global Tag: ProdA_2024, domain: MBD_TQ_T0, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_TQ_T0/2c/2f/2c2fd69a03184d0dbbd5b9698b270204_mbd_tq_t0_45026_v2.root
+Global Tag: ProdA_2024, domain: MBD_T0CORR, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_T0CORR/1e/8a/1e8a919334c117e99417baa6c7c8e9ef_mbd_t0corr-47352.root
+Global Tag: ProdA_2024, domain: MBD_TIMECORR, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_TIMECORR/ef/2f/ef2f2937016c780fede78de66a6fe76e_mbd_timecorr-47260_47274.root
+Global Tag: ProdA_2024, domain: MBD_SLEWCORR, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/MBD_SLEWCORR/c9/7e/c97e1dec329fff3a68988d07f3a201c4_mbd_slewcorr_40507_v2.root
+Global Tag: ProdA_2024, domain: MBD_TIMERMS, timestamp: 47352... reply: no file found for MBD_TIMERMS or MBD_TIMERMS_default
+/home/phnxbld/sPHENIX/alma9.2-gcc-14.2.0/new/source/coresoftware/offline/packages/mbd/MbdCalib.cc:1438: , WARNING, trms calib missing 
+Global Tag: ProdA_2024, domain: CEMC_hotTowers_fracBadChi2, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/CEMC_hotTowers_fracBadChi2/80/3c/803c80568092443d115e063c055010fd_CEMC_hotTowers_fracBadChi2_ana509_2024p022_v001_47352.root
+Global Tag: ProdA_2024, domain: CEMC_BadTowerMap, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/CEMC_BadTowerMap/15/69/1569ba724f7fdbfe3cfd672dc5d94868_EMCalHotMap_ana509_2024p022_v001_47352cdb.root
+Global Tag: ProdA_2024, domain: HCALIN_hotTowers_fracBadChi2, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALIN_hotTowers_fracBadChi2/95/f5/95f51c7e5c619408d3ff3cbd472502d5_HCALIN_hotTowers_fracBadChi2_ana509_2024p022_v001_47352.root
+Global Tag: ProdA_2024, domain: HCALIN_BadTowerMap, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALIN_BadTowerMap_default/6c/13/6c13ddeed34daa2e9445b0fd9e054bf4_HCALIN_HotMap_default.root
+Global Tag: ProdA_2024, domain: HCALOUT_hotTowers_fracBadChi2, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALOUT_hotTowers_fracBadChi2/fd/4a/fd4aa1827209f83af4ffa134cee5c601_HCALOUT_hotTowers_fracBadChi2_ana509_2024p022_v001_47352.root
+Global Tag: ProdA_2024, domain: HCALOUT_BadTowerMap, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALOUT_BadTowerMap_default/e8/32/e832fdbec055fc0024786ab8d705012b_HCALOUT_HotMap_default.root
+Global Tag: ProdA_2024, domain: CEMC_calib_ADC_to_ETower, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/CEMC_calib_ADC_to_ETower/9d/b3/9db3df70aa7b575b5e2417904e551efa_emcal_calib_pp_47289_53864_v2.root
+CaloTowerCalib_MV_test::InitRun: Using setted url /gpfs/mnt/gpfs02/sphenix/user/dading/my_tower_time_calibrations/macro/timing_cdb/CEMC_timeCalib_run47352.root
+Global Tag: ProdA_2024, domain: CEMC_ZSCrossCalib, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/CEMC_ZSCrossCalib/08/6c/086c5aadbeff4ad42b7266d4b822150c_CEMC_ZSCrossCalib_ana509_2024p022_v001_47352.root
+CEMCCALIB::CEMC will exclude 480 towers with unavailable (-999/non-finite) timing calibration
+Global Tag: ProdA_2024, domain: HCALOUT_calib_ADC_to_ETower, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALOUT_calib_ADC_to_ETower/66/0b/660b353b6e0aeb328d3d939515508bb5_cdb_ohcal_tsc_temp_cosmic_hh_47352_47356.root
+CaloTowerCalib_MV_test::InitRun: Using setted url /gpfs/mnt/gpfs02/sphenix/user/dading/my_tower_time_calibrations/macro/timing_cdb/HCALOUT_timeCalib_run47352.root
+Global Tag: ProdA_2024, domain: HCALOUT_ZSCrossCalib, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALOUT_ZSCrossCalib/b6/e7/b6e7ab7562b21f53a9d53bc377a81ba0_HCALOUT_ZSCrossCalib_ana509_2024p022_v001_47352.root
+Global Tag: ProdA_2024, domain: HCALIN_calib_ADC_to_ETower, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALIN_calib_ADC_to_ETower/58/c6/58c6106798156466deec24160cfdf078_cdb_ihcal_tsc_temp_cosmic_47352_47356.root
+CaloTowerCalib_MV_test::InitRun: Using setted url /gpfs/mnt/gpfs02/sphenix/user/dading/my_tower_time_calibrations/macro/timing_cdb/HCALIN_timeCalib_run47352.root
+Global Tag: ProdA_2024, domain: HCALIN_ZSCrossCalib, timestamp: 47352... reply: /cvmfs/sphenix.sdcc.bnl.gov/calibrations/sphnxpro/cdb/HCALIN_ZSCrossCalib/d2/71/d2711758c7da701cfcdfd0b4c698ff1d_HCALIN_ZSCrossCalib_ana509_2024p022_v001_47352.root
+--------------------------------------
+
+List of Nodes in Fun4AllServer:
+Node Tree under TopNode TOP
+TOP (PHCompositeNode)/
+   DST (PHCompositeNode)/
+      Sync (IO,SyncObjectv1)
+      EventHeader (IO,EventHeaderv1)
+      PacketsKeep (PHCompositeNode)/
+         14001 (IO,Gl1Packetv3)
+      MBD (PHCompositeNode)/
+         MbdRawContainer (IO,MbdRawContainerV2)
+         MbdOut (IO,MbdOutV2)
+         MbdPmtContainer (IO,MbdPmtContainerV1)
+      CEMC (PHCompositeNode)/
+         TOWERS_CEMC (IO,TowerInfoContainerv4)
+         TOWERINFO_CALIB_CEMC (IO,TowerInfoContainerv4)
+         CLUSTERINFO_CEMC (IO,RawClusterContainer)
+         TOWERINFO_CALIB_CEMC_RETOWER (IO,TowerInfoContainerv4)
+      HCALIN (PHCompositeNode)/
+         TOWERS_HCALIN (IO,TowerInfoContainerv4)
+         TOWERINFO_CALIB_HCALIN (IO,TowerInfoContainerv4)
+      HCALOUT (PHCompositeNode)/
+         TOWERS_HCALOUT (IO,TowerInfoContainerv4)
+         TOWERINFO_CALIB_HCALOUT (IO,TowerInfoContainerv4)
+      SEPD (PHCompositeNode)/
+         TOWERS_SEPD (IO,TowerInfoContainerv4)
+      GLOBAL (PHCompositeNode)/
+         MbdVertexMap (IO,MbdVertexMapv1)
+         GlobalVertexMap (IO,GlobalVertexMapv1)
+      ZDC (PHCompositeNode)/
+         TOWERS_ZDC (IO,TowerInfoContainerv4)
+      ANTIKT (PHCompositeNode)/
+         TOWER (PHCompositeNode)/
+            AntiKt_unsubtracted_r04 (IO,JetContainerv1)
+            AntiKt_unsubtracted_r04_calib (IO,JetContainerv1)
+   RUN (PHCompositeNode)/
+      CEMC (PHCompositeNode)/
+         TOWERGEOM_CEMC_DETAILED (IO,RawTowerGeomContainer_Cylinderv1)
+         TOWERGEOM_CEMC (IO,RawTowerGeomContainer_Cylinderv1)
+      HCALIN (PHCompositeNode)/
+         TOWERGEOM_HCALIN (IO,RawTowerGeomContainer_Cylinderv1)
+      HCALOUT (PHCompositeNode)/
+         TOWERGEOM_HCALOUT (IO,RawTowerGeomContainer_Cylinderv1)
+      CYLINDERGEOM_CEMC (IO,PHG4CylinderGeomContainer)
+      CYLINDERCELLGEOM_CEMC (IO,PHG4CylinderCellGeomContainer)
+      CdbUrl (IO,CdbUrlSavev1)
+      TriggerRunInfo (IO,TriggerRunInfov1)
+      RunHeader (IO,RunHeaderv1)
+      Flags (IO,FlagSavev1)
+      MBD (PHCompositeNode)/
+         MbdGeom (IO,MbdGeomV1)
+   PAR (PHCompositeNode)/
+
+
+CaloStatusSkimmer::End(PHCompositeNode *topNode) This is the End...
+CaloStatusSkimmer::End Total events processed: 200
+CaloStatusSkimmer::End Total events skimmed: 0
+TimingAna: 43 entries from 200 events -> /sphenix/user/samfred/projects/gammajet/timingana/output/timing_dading_DST_CALOFITTING_run2pp_pro001_pcdb001_v001-00047352-00000_r04.root
+Written to /sphenix/user/samfred/projects/gammajet/timingana/output/timing_dading_DST_CALOFITTING_run2pp_pro001_pcdb001_v001-00047352-00000_r04.root

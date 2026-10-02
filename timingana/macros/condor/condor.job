@@ -1,0 +1,16 @@
+# One TimingAna job per DST in queue.list (see make_queue.sh), with Dading Chen's tower-time
+# calibration (timecalib = 1). Output: /sphenix/tg/tg01/jets/samfred/timingana
+Executable         = /sphenix/user/samfred/projects/gammajet/timingana/macros/run_one.sh
+Universe           = vanilla
+notification       = Never
+Input              = /dev/null
+Arguments          = $(dst) 0.4 0 1 /sphenix/tg/tg01/jets/samfred/timingana
+Initialdir         = /sphenix/user/samfred/projects/gammajet/timingana/macros/condor
+Output             = $(Initialdir)/log/$(Process).out
+Error              = $(Initialdir)/log/$(Process).err
+Log                = /tmp/samfred/timingana_$(Cluster).log
+PeriodicHold       = (NumJobStarts>=1 && JobStatus == 1)
+job_lease_duration = 3600
+request_memory     = 4096MB
+
+Queue dst from queue.list

@@ -200,7 +200,12 @@ class CaloAna : public SubsysReco
 
  protected:
   TRandom rand;
-  TH1D *h_jerband_quaddiff = nullptr; // pt-dependent JER resolution, same source smear_reco and smear_pt draw from
+  // pt-dependent fractional JER smearing width (sigma/pt) from jerband_smearing_templates.root: nominal
+  // and the sysup/sysdown variations (each an absolute width curve, not a delta on nominal). Same
+  // source the reco-side smearing and smear_pt() both draw from.
+  TH1D *h_jer_smear_nominal = nullptr;
+  TH1D *h_jer_smear_up      = nullptr;
+  TH1D *h_jer_smear_down    = nullptr;
   std::string detector;
   std::string outfilename;
   Fun4AllHistoManager *hm = nullptr;
@@ -326,8 +331,11 @@ class CaloAna : public SubsysReco
   Float_t m_jet_ihfrac       [m_nRadii];
   Float_t m_jet_ohfrac       [m_nRadii];
   Float_t m_jet_time         [m_nRadii];
+  // Highest-pT in-time recoil-side jet other than the leading one. m_3jet_pt is in the
+  // same pT definition unfolder.cc pairs on: jet_pt_calib for data, jet_pt_smear_truth for MC.
   Float_t m_3jet_pt          [m_nRadii];
-  Float_t m_3jet_dr          [m_nRadii];
+  Float_t m_3jet_eta         [m_nRadii];
+  Float_t m_3jet_phi         [m_nRadii];
 
   Float_t m_truth_jet_pt     [m_nRadii];
   Float_t m_truth_jet_e      [m_nRadii];
