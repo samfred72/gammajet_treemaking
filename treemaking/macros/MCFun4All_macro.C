@@ -395,7 +395,6 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
     _jetRecoUnsub->Verbosity(verbosity);
     se->registerSubsystem(_jetRecoUnsub);
 
-    std::string jesCalibFile = "/sphenix/user/hanpuj/JES_MC_Calibration/offline/JES_Calibration_Final.root";
     for (int ir = 0; ir < doUnsubJet_radius.size(); ++ir) {
       cout << "Input: " << Form("AntiKt_unsubtracted_r0%i",(int)(doUnsubJet_radius[ir]*10)) << endl;
       cout << "Output: " << Form("AntiKt_unsubtracted_r0%i_calib",(int)(doUnsubJet_radius[ir]*10)) << endl << endl;
@@ -404,7 +403,6 @@ void MCFun4All_macro(const char* infile="/sphenix/user/samfred/projects/pythia28
       jetCalib->set_OutputNode(Form("AntiKt_unsubtracted_r0%i_calib",(int)(doUnsubJet_radius[ir]*10)));
       jetCalib->set_JetRadius(doUnsubJet_radius[ir]);
       jetCalib->set_ApplyResidualCalib(true);  // z-vertex + eta residual correction
-      jetCalib->set_CalibFile(jesCalibFile);   // local file; remove once the CDB payload is updated
       se->registerSubsystem(jetCalib);
     }
     JetCalib * jetCalibOld = new JetCalib(Form("JetCalibOld04"));

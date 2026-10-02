@@ -104,7 +104,6 @@ void Fun4All_timing(const char *dst = "DST_JETCALO_run2pp_ana521_2025p007_v001-0
   jetcalib->set_OutputNode(jetnode + "_calib");
   jetcalib->set_JetRadius(radius);
   jetcalib->set_ApplyResidualCalib(true);
-  jetcalib->set_CalibFile("/sphenix/user/hanpuj/JES_MC_Calibration/offline/JES_Calibration_Final.root");
   se->registerSubsystem(jetcalib);
 
   Fun4AllInputManager *in = new Fun4AllDstInputManager("DST_TOWERS");
