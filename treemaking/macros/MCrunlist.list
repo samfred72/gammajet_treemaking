@@ -13,7 +13,7 @@ herwig Photon20
 #pythia Jet50
 #pythia Jet60
 #pythia Jet80
-#pythia Jet12_long
+pythia Jet12_long
 #pythia Photon5_double
 #pythia Photon10_double
 #pythia Photon20_double
