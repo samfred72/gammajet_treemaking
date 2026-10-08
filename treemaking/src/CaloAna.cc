@@ -127,6 +127,7 @@ void CaloAna::InitTree(){
   towerntuple->Branch("thirdjet_pt", m_3jet_pt     , "thirdjet_pt[7]/F");
   towerntuple->Branch("thirdjet_eta",m_3jet_eta    , "thirdjet_eta[7]/F");
   towerntuple->Branch("thirdjet_phi",m_3jet_phi    , "thirdjet_phi[7]/F");
+  towerntuple->Branch("thirdjet_pt_calib",m_3jet_pt_calib, "thirdjet_pt_calib[7]/F");
   if (isMC) {
     towerntuple->Branch("jet_pt_smear_reco",m_jet_pt_smear_reco, "jet_pt_smear_reco[7]/F");
     towerntuple->Branch("jet_pt_smear_high_reco",m_jet_pt_smear_high_reco, "jet_pt_smear_high_reco[7]/F");
@@ -359,7 +360,7 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
     // photon's cone, and (data) is in time. Only the leading one is stored as the recoil
     // jet, and the highest of the rest as the third jet, so unfolder.cc can vary the veto
     // threshold without storing a jet vector.
-    struct ThirdJetCand { unsigned ij; float pt, eta, phi; };
+    struct ThirdJetCand { unsigned ij; float pt, pt_calib, eta, phi; };
     std::vector<ThirdJetCand> thirdjet_cands;
     int ileadjet = -1;
     float maxjetpt = 0;
@@ -384,16 +385,18 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
 
       float dr = DeltaR(eta, phi, m_cluster_eta, m_cluster_phi);
       if (dr < 0.4) m_cluster_Z += m_cluster_pt / pt_calib;
+      // Keep the jet if any pT definition reaches the storage floor. jet_store_pt_cut (4 GeV) also
+      // covers the old calib/0.90 >= 5 GeV term; with that term alone, data jets at 4.0-4.5 GeV
+      // survived only through the raw-pT cut (~20% of them).
       if (pt < jet_pt_cut && // Uncalibrated jets
-          pt_calib < jet_calib_pt_cut &&  // JES calibrated
-          pt_recalib < jet_calib_pt_cut &&  // JES calibrated + fake insitu
+          pt_calib < jet_store_pt_cut &&  // JES calibrated
           (!isMC || (isMC &&
-          pt_smear_reco       < jet_calib_pt_cut && // JES and JER on reco
-          pt_smear_high_reco  < jet_calib_pt_cut && // JES and JER on reco
-          pt_smear_low_reco   < jet_calib_pt_cut && // JES and JER on reco
-          pt_smear_truth      < jet_calib_pt_cut && // JES and JER on truth
-          pt_smear_high_truth < jet_calib_pt_cut && // JES and JER on truth+uncertainty
-          pt_smear_low_truth  < jet_calib_pt_cut))) continue; // JES and JER on truth-uncertainty
+          pt_smear_reco       < jet_store_pt_cut && // JES and JER on reco
+          pt_smear_high_reco  < jet_store_pt_cut && // JES and JER on reco
+          pt_smear_low_reco   < jet_store_pt_cut && // JES and JER on reco
+          pt_smear_truth      < jet_store_pt_cut && // JES and JER on truth
+          pt_smear_high_truth < jet_store_pt_cut && // JES and JER on truth+uncertainty
+          pt_smear_low_truth  < jet_store_pt_cut))) continue; // JES and JER on truth-uncertainty
       if (dr < m_radii[ir]) continue;
 
       float emcal_calo_e = 0;
@@ -446,7 +449,7 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
       // Counted only after the photon-cone and timing cuts, so out-of-time jets no longer
       // veto data events (they never could in MC, which has no timing cut).
       npassingjets[ir]++;
-      thirdjet_cands.push_back({ij, isMC ? pt_smear_truth : pt_calib, eta, phi});
+      thirdjet_cands.push_back({ij, isMC ? pt_smear_truth : pt_calib, pt_calib, eta, phi});
       if (pt < maxjetpt) continue;
       ileadjet = ij;
       maxjetpt = pt;
@@ -485,6 +488,7 @@ int CaloAna::process_towers(PHCompositeNode* topNode)
     }
     if (third) {
       m_3jet_pt[ir] = third->pt;
+      m_3jet_pt_calib[ir] = third->pt_calib;
       m_3jet_eta[ir] = third->eta;
       m_3jet_phi[ir] = third->phi;
     }
@@ -554,6 +558,7 @@ void CaloAna::Clear() {
     m_3jet_pt  [ir] = 0;
     m_3jet_eta [ir] = 0;
     m_3jet_phi [ir] = 0;
+    m_3jet_pt_calib[ir] = 0;
   }
   if (isMC) {
 

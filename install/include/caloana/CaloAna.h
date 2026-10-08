@@ -234,6 +234,9 @@ class CaloAna : public SubsysReco
   float cluster_pt_cut = 10/1.011; // For EM Scale uncertainty
   float jet_pt_cut = 3;
   float jet_calib_pt_cut = 5;
+  // Storage floor for the calibrated and smeared jet pT: the 5 GeV analysis cut times the in-situ
+  // scan's lower edge (0.80), so every jet the data JES scan or a veto can move above 5 GeV is kept.
+  float jet_store_pt_cut = 4.0;
   static const int m_nRadii = 7;
   // Index into m_radii/m_jet_nodenames for r=0.4, matched to AntiKt_unsubtracted_r04_calib_old
   static const int m_oldCalibRadiusIndex = 2;
@@ -336,6 +339,7 @@ class CaloAna : public SubsysReco
   Float_t m_3jet_pt          [m_nRadii];
   Float_t m_3jet_eta         [m_nRadii];
   Float_t m_3jet_phi         [m_nRadii];
+  Float_t m_3jet_pt_calib    [m_nRadii]; // the same jet's JES-calibrated pT (equals m_3jet_pt in data)
 
   Float_t m_truth_jet_pt     [m_nRadii];
   Float_t m_truth_jet_e      [m_nRadii];
